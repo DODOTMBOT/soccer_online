@@ -1,0 +1,426 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- ПЕРЕЧИСЛЕНИЯ (ENUMS) ---
+
+enum Role {
+  USER
+  PREMIUM1
+  PREMIUM2
+  PREMIUM3
+  ADMIN
+}
+
+// --- НОВЫЕ ENUMS ДЛЯ VFL v5.0 ---
+
+// Стили игры (Schools/Styles) - 6 основных + Нормальный
+enum VflStyle {
+  NORMAL      // Нормальный
+  BRITISH     // Британский (Rain School)
+  CATENACCIO  // Катеначчо (Rain School)
+  HIT_AND_RUN // Бей-Беги (Rain School)
+  SPARTAK     // Спартаковский (Sun School)
+  BRAZILIAN   // Бразильский (Sun School)
+  TIKI_TAKA   // Тики-Така (Sun School)
+}
+
+// Погодные условия
+enum WeatherType {
+  SUN
+  HEAT
+  CLOUDY
+  OVERCAST // Пасмурно
+  RAIN
+  SNOW
+}
+
+// Грубость игры
+enum Roughness {
+  CAREFUL // Аккуратно
+  NORMAL  // Нормально
+  ROUGH   // Грубо
+}
+
+// Настрой (Motivation)
+enum TeamSpirit {
+  SUPER   // +27-54% к силе
+  NORMAL  // 100%
+  REST    // -10-25% к силе
+}
+
+// Тактика (Mentality)
+enum Mentality {
+  SUPER_DEFENSIVE // Суперзащитная
+  DEFENSIVE       // Защитная
+  NORMAL          // Нормальная
+  ATTACKING       // Атакующая
+  ALL_OUT_ATTACK  // Все в атаку
+}
+
+// Тип защиты
+enum DefenseType {
+  MAN_MARKING // Персонально
+  ZONAL       // Зонально
+}
+
+// Схемы (Formations) - расширенный список под VFL
+enum Formation {
+  F442
+  F433
+  F424
+  F532
+  F541
+  F352
+  F343
+  // ... можно добавить другие схемы из VFL
+}
+
+// Позиции игроков
+enum Position {
+  GK
+  LB
+  RB
+  LD  // Left Defender (VFL specific)
+  RD  // Right Defender (VFL specific)
+  CD  // Center Defender
+  SW  // Sweeper
+  LM
+  RM
+  DM
+  CM
+  AM
+  LF  // Left Forward
+  RF  // Right Forward
+  CF  // Center Forward
+  ST  // Striker
+  FR  // Free Role (Свободный художник)
+}
+
+// Статусы
+enum SeasonStatus {
+  ACTIVE
+  FINISHED
+}
+
+enum MatchStatus {
+  UPCOMING
+  LIVE
+  FINISHED
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// --- МОДЕЛИ ---
+
+model Country {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  flag          String?
+  confederation String    // UEFA, CONMEBOL и т.д.
+
+  leagues       League[]
+  teams         Team[]
+  players       Player[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model League {
+  id            String    @id @default(cuid())
+  name          String
+  level         Int        
+  teamsCount    Int
+
+  countryId     String
+  country       Country   @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  nextLeagueId  String?   @unique
+  nextLeague    League?   @relation("LeagueHierarchy", fields: [nextLeagueId], references: [id])
+  prevLeague    League?   @relation("LeagueHierarchy")
+
+  teams         Team[]
+  matches       Match[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([countryId])
+}
+
+model Season {
+  id            String        @id @default(cuid())
+  year          Int           @unique
+  status        SeasonStatus  @default(ACTIVE)
+
+  matches       Match[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model User {
+  id            String   @id @default(cuid())
+  login         String   @unique
+  email         String   @unique
+  password      String
+  name          String?
+  surname       String?
+  role          Role     @default(USER)
+  balance       BigInt   @default(1000000)
+
+  managedTeam   Team?    @relation("TeamManager")
+  
+  applications  TeamApplication[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Team {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  logo          String?
+  stadium       String
+  
+  // Оставляем эти поля, они нужны движку для расчетов (даже если скрыты в UI)
+  finances      BigInt   @default(0) 
+  baseLevel     Int      @default(1)
+  capacity      Int      @default(20000) 
+
+  countryId     String
+  country       Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  leagueId      String
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  managerId     String?  @unique
+  manager       User?    @relation("TeamManager", fields: [managerId], references: [id])
+
+  players       Player[]
+  trophies      Trophy[]
+  
+  applications  TeamApplication[]
+
+  homeMatches   Match[]          @relation("HomeMatches")
+  awayMatches   Match[]          @relation("AwayMatches")
+  setups        MatchTeamSetup[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([leagueId])
+}
+
+model TeamApplication {
+  id         String            @id @default(cuid())
+  
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  teamId     String
+  team       Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  status     ApplicationStatus @default(PENDING)
+  
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([userId, teamId])
+  @@index([status])
+}
+
+model Player {
+  id            String    @id @default(cuid())
+  firstName     String
+  lastName      String
+  age           Int       // Важно для бонуса Капитана (24-34 года)
+  
+  mainPosition  Position
+  sidePosition  Position? 
+
+  power         Int       // Номинальная сила
+  fatigue       Int       @default(0) // Усталость 0-100
+
+  // --- НОВЫЕ ПОЛЯ VFL ---
+  
+  // 1. Физическая форма (Синусоида)
+  formIndex     Int       @default(1) // День цикла формы (1-12)
+  currentForm   Int       @default(100) // Текущее значение (75-125%) - пересчитывается ежедневно
+
+  // 2. Любимый стиль (для бонуса +12.5% к силе и сыгранности)
+  favoriteStyle  VflStyle?
+  styleKnowledge Int       @default(0) // Изученность стиля (0-100%)
+
+  // 3. Спецвозможности (уровни 0-4)
+  // Имена переведены на английские аналоги из VFL для ясности
+  specSpeed       Int @default(0) // Sk (Скорость)
+  specHeading     Int @default(0) // G (Голова)
+  specLongPass    Int @default(0) // Pd (Длинный пас)
+  specShortPass   Int @default(0) // Pk (Короткий пас)
+  specDribbling   Int @default(0) // D (Дриблинг)
+  specCombination Int @default(0) // Km (Комбинирование)
+  specTackling    Int @default(0) // Ot (Отбор)
+  specMarking     Int @default(0) // Op (Опека)
+  specShooting    Int @default(0) // U (Удар)
+  
+  specFreeKicks   Int @default(0) // Sh (Штрафные) - КРИТИЧНО
+  specCorners     Int @default(0) // Ug (Угловые) - КРИТИЧНО
+  specPenalty     Int @default(0) // P (Пенальти) - КРИТИЧНО
+  
+  specCaptain     Int @default(0) // Ka (Капитан)
+  specLeader      Int @default(0) // L (Лидер)
+  specAthleticism Int @default(0) // At (Атлетизм)
+  specSimulation  Int @default(0) // Sm (Симулянт)
+  
+  specGkReflexes  Int @default(0) // Для вратаря (реакция/выход)
+  specGkOut       Int @default(0) // B (Выход)
+
+  price         BigInt?    
+
+  teamId        String
+  team          Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  countryId     String
+  country       Country   @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  // Связи для ролей в матче
+  captainOfSetups       MatchTeamSetup[] @relation("SetupCaptain")
+  freeKickTakerOfSetups MatchTeamSetup[] @relation("SetupFreeKick")
+  cornerTakerOfSetups   MatchTeamSetup[] @relation("SetupCorner")
+  penaltyTakerOfSetups  MatchTeamSetup[] @relation("SetupPenalty")
+
+  lineupSlots   MatchLineupSlot[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([countryId])
+  @@index([mainPosition])
+}
+
+model Trophy {
+  id          String   @id @default(cuid())
+  name        String    
+  seasonYear  Int       
+  
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+}
+
+model Match {
+  id            String      @id @default(cuid())
+  seasonId      String
+  season        Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  leagueId      String
+  league        League      @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  
+  homeTeamId    String
+  homeTeam      Team        @relation("HomeMatches", fields: [homeTeamId], references: [id], onDelete: Cascade)
+  awayTeamId    String
+  awayTeam      Team        @relation("AwayMatches", fields: [awayTeamId], references: [id], onDelete: Cascade)
+  
+  tour          Int
+  
+  homeScore     Int?
+  awayScore     Int?
+  status        MatchStatus @default(UPCOMING)
+  
+  // --- НОВЫЕ ПОЛЯ VFL (Среда матча) ---
+  weather       WeatherType @default(CLOUDY) // Влияет на стили
+  temperature   Int         @default(20)     // Влияет на силу
+  attendance    Int         @default(0)      // Влияет на Home Bonus
+
+  report        Json?        
+
+  setups        MatchTeamSetup[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([seasonId])
+  @@index([leagueId])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([tour])
+}
+
+model MatchTeamSetup {
+  id            String       @id @default(cuid())
+  matchId       String
+  match         Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId        String
+  team          Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  // Тактические настройки VFL
+  tactic        VflStyle     @default(NORMAL) // Бей-беги, Тики-така и т.д.
+  
+  formation     Formation    @default(F442)
+  
+  mentality     Mentality    @default(NORMAL) // Суперзащита ... Все в атаку
+  defenseSetup  DefenseType  @default(ZONAL)  // Зона / Персоналка
+  spirit        TeamSpirit   @default(NORMAL) // Настрой (Супер/Отдых)
+  
+  roughness     Roughness    @default(NORMAL) // Грубость (Аккуратно/Грубо)
+
+  // --- НАЗНАЧЕННЫЕ РОЛИ (Критично для штрафов) ---
+  captainId        String?
+  captain          Player?   @relation("SetupCaptain", fields: [captainId], references: [id])
+
+  freeKickTakerId  String?
+  freeKickTaker    Player?   @relation("SetupFreeKick", fields: [freeKickTakerId], references: [id])
+
+  cornerTakerId    String?
+  cornerTaker      Player?   @relation("SetupCorner", fields: [cornerTakerId], references: [id])
+
+  penaltyTakerId   String?
+  penaltyTaker     Player?   @relation("SetupPenalty", fields: [penaltyTakerId], references: [id])
+
+  // "Условия и действия" (Замены по ходу матча)
+  matchConditions  Json?     // Массив объектов {condition, action, minute, playerIn, playerOut}
+
+  isSubmitted      Boolean   @default(false)
+  submittedAt      DateTime?
+
+  lineupSlots      MatchLineupSlot[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([matchId, teamId])
+}
+
+model MatchLineupSlot {
+  id                String         @id @default(cuid())
+  matchTeamSetupId  String
+  matchTeamSetup    MatchTeamSetup @relation(fields: [matchTeamSetupId], references: [id], onDelete: Cascade)
+  
+  slotIndex         Int            // 1-11 (основа), 12+ (запас)
+  
+  playerId          String
+  player            Player         @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  
+  assignedPosition  Position       // На какую позицию поставлен (может отличаться от родной -> штраф)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([matchTeamSetupId, slotIndex])
+  @@index([playerId])
+}
