@@ -1,28 +1,38 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-// Функция алгоритма Бергера
+// Алгоритм Бергера для круговой системы
 function generateSchedule(teams: string[]) {
   const schedule = [];
   const numberOfTeams = teams.length;
+  
+  // Если команд нечетное количество, добавляем виртуального соперника
   if (numberOfTeams % 2 !== 0) teams.push("BYE");
 
   const n = teams.length;
   const rounds = n - 1;
   const half = n / 2;
-  let currentTeams = [...teams];
+  
+  const currentTeams = [...teams];
 
   for (let round = 0; round < rounds; round++) {
     const roundMatches = [];
     for (let i = 0; i < half; i++) {
       const home = currentTeams[i];
       const away = currentTeams[n - 1 - i];
+      
       if (home !== "BYE" && away !== "BYE") {
-        if (round % 2 === 0) roundMatches.push({ home, away });
-        else roundMatches.push({ home: away, away: home });
+        // Чередуем хозяев, чтобы у команд не было длинных серий "дома" или "в гостях"
+        if (round % 2 === 0) {
+          roundMatches.push({ home, away });
+        } else {
+          roundMatches.push({ home: away, away: home });
+        }
       }
     }
     schedule.push(roundMatches);
+    
+    // Вращение массива: фиксируем первый элемент [0], остальные сдвигаем
     currentTeams.splice(1, 0, currentTeams.pop()!);
   }
   return schedule;
@@ -32,93 +42,87 @@ export async function POST(req: Request) {
   try {
     const { seasonId } = await req.json();
 
-    // --- БЛОК 1: ИЩЕМ ЛИГИ ТЕКУЩЕГО СЕЗОНА ---
-    let leagues = await prisma.league.findMany({
+    if (!seasonId) return NextResponse.json({ error: "ID сезона обязателен" }, { status: 400 });
+
+    // 1. Получаем все лиги, привязанные к этому сезону
+    const leagues = await prisma.league.findMany({
       where: { seasonId },
       include: { teams: { select: { id: true } } }
     });
 
-    if (leagues.length === 0) return NextResponse.json({ error: "В сезоне нет лиг" }, { status: 400 });
+    if (leagues.length === 0) {
+      return NextResponse.json({ error: "В сезоне нет лиг. Сначала выполните 'Шаг 1: Создать Дивизионы'." }, { status: 400 });
+    }
 
-    const logs: string[] = [];
-    const allMatchesToCreate: any[] = [];
+    // ИСПРАВЛЕНИЕ: Явно указываем тип any[]
+    const matchesToCreate: any[] = [];
+    let leaguesProcessed = 0;
 
-    // --- БЛОК 2: ПРОХОДИМ ПО ЛИГАМ ---
     for (const league of leagues) {
-      let teamIds = league.teams.map(t => t.id);
+      const teams = league.teams.map(t => t.id);
 
-      // === ВСТАВКА: АВТО-ПЕРЕНОС КОМАНД ===
-      // Если в лиге пусто, пробуем украсть команды из старой лиги (ID со скрина)
-      if (teamIds.length === 0) {
-        const OLD_LEAGUE_ID = "cmk2mlmk5006j59njn0lmmnui"; // Твой ID со скрина
-        
-        logs.push(`⚠️ В лиге "${league.name}" пусто. Ищу команды в старой лиге (${OLD_LEAGUE_ID})...`);
-
-        // Переносим команды
-        const transfer = await prisma.team.updateMany({
-          where: { leagueId: OLD_LEAGUE_ID },
-          data: { leagueId: league.id } // Привязываем к новой лиге
-        });
-
-        if (transfer.count > 0) {
-          logs.push(`✅ Перенесено ${transfer.count} команд! Теперь они в текущем сезоне.`);
-          
-          // Обновляем список ID для генерации
-          const updatedTeams = await prisma.team.findMany({
-            where: { leagueId: league.id },
-            select: { id: true }
-          });
-          teamIds = updatedTeams.map(t => t.id);
-        } else {
-          logs.push(`❌ Не нашел команд даже в старой лиге.`);
-        }
-      }
-      // =====================================
-
-      // Проверка на количество (строго 16)
-      if (teamIds.length !== 16) {
-        logs.push(`⛔️ Лига "${league.id}" пропущена: сейчас в ней ${teamIds.length} команд (надо 16).`);
+      // Строгая проверка регламента (16 команд)
+      if (teams.length !== 16) {
+        console.warn(`⚠️ Лига ${league.name} (ID: ${league.id}) пропущена: ${teams.length} команд вместо 16.`);
         continue;
       }
 
-      // Генерация календаря
-      const shuffled = teamIds.sort(() => Math.random() - 0.5);
-      const firstLeg = generateSchedule(shuffled);
+      // Перемешиваем команды перед жеребьевкой, чтобы календарь не был одинаковым каждый сезон
+      const shuffledTeams = teams.sort(() => 0.5 - Math.random());
 
-      // 1 круг
-      firstLeg.forEach((roundMatches, idx) => {
-        const tour = idx + 1;
-        roundMatches.forEach(m => {
-          allMatchesToCreate.push({
-            seasonId, leagueId: league.id, status: "UPCOMING",
-            homeTeamId: m.home, awayTeamId: m.away, tour, round: tour
+      // Генерируем сетку 1-го круга (15 туров)
+      const firstLeg = generateSchedule(shuffledTeams);
+
+      // --- КРУГ 1 ---
+      firstLeg.forEach((roundMatches, roundIndex) => {
+        const tour = roundIndex + 1;
+        roundMatches.forEach(match => {
+          matchesToCreate.push({
+            seasonId,
+            leagueId: league.id,
+            homeTeamId: match.home,
+            awayTeamId: match.away,
+            tour: tour,
+            status: "UPCOMING"
           });
         });
       });
 
-      // 2 круг
-      firstLeg.forEach((roundMatches, idx) => {
-        const tour = idx + 1 + firstLeg.length;
-        roundMatches.forEach(m => {
-          allMatchesToCreate.push({
-            seasonId, leagueId: league.id, status: "UPCOMING",
-            homeTeamId: m.away, awayTeamId: m.home, tour, round: tour
+      // --- КРУГ 2 (Ответные матчи) ---
+      firstLeg.forEach((roundMatches, roundIndex) => {
+        const tour = roundIndex + 1 + 15; // Туры с 16 по 30
+        roundMatches.forEach(match => {
+          matchesToCreate.push({
+            seasonId,
+            leagueId: league.id,
+            homeTeamId: match.away, // Меняем стороны: Гости становятся Хозяевами
+            awayTeamId: match.home,
+            tour: tour,
+            status: "UPCOMING"
           });
         });
       });
 
-      logs.push(`✅ Лига "${league.name || league.id}": Календарь создан (240 матчей).`);
+      leaguesProcessed++;
     }
 
-    // Сохранение
-    if (allMatchesToCreate.length > 0) {
-      await prisma.match.createMany({ data: allMatchesToCreate });
-      return NextResponse.json({ success: true, message: logs.join("\n") });
-    } else {
-      return NextResponse.json({ error: "Ничего не создано.\n" + logs.join("\n") }, { status: 400 });
+    if (matchesToCreate.length === 0) {
+      return NextResponse.json({ error: "Не удалось создать матчи. Убедитесь, что в лигах ровно по 16 команд." }, { status: 400 });
     }
+
+    // Очищаем старые матчи этого сезона (если перегенерируем)
+    await prisma.match.deleteMany({ where: { seasonId } });
+
+    // Массовое сохранение (оптимизировано)
+    await prisma.match.createMany({ data: matchesToCreate });
+
+    return NextResponse.json({ 
+      success: true, 
+      message: `Календарь успешно создан!\nЛиг: ${leaguesProcessed}\nМатчей: ${matchesToCreate.length}` 
+    });
 
   } catch (error: any) {
+    console.error("CALENDAR_GEN_ERROR:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -36,65 +36,92 @@ export async function POST(
       return NextResponse.json({ error: "Матч уже завершен" }, { status: 400 });
     }
 
-    // 2. Поиск составов
+    // 2. Поиск составов (фоллбек на дефолт, если нет)
     const homeSetup = match.setups.find(s => s.teamId === match.homeTeamId);
     const awaySetup = match.setups.find(s => s.teamId === match.awayTeamId);
 
-    if (!homeSetup || !awaySetup) {
-      return NextResponse.json(
-        { error: "Обе команды должны отправить составы перед генерацией" },
-        { status: 400 }
-      );
-    }
-
     // 3. Формируем данные для движка
-    // ИСПРАВЛЕНИЕ: Склеиваем lastName и firstName в поле name
     const engineHome = {
       teamId: match.homeTeamId,
       isHome: true,
-      tactic: homeSetup.tactic,
-      defenseSetup: homeSetup.defenseSetup,
-      players: homeSetup.lineupSlots.map(slot => ({
+      tactic: homeSetup?.tactic || "NORMAL",
+      defenseSetup: homeSetup?.defenseSetup || "ZONAL",
+      players: homeSetup?.lineupSlots.map(slot => ({
         ...slot.player,
-        // Формируем имя для логов: "Фамилия Имя"
         name: `${slot.player.lastName} ${slot.player.firstName}`,
         assignedPosition: slot.assignedPosition
-      }))
+      })) || []
     };
 
     const engineAway = {
       teamId: match.awayTeamId,
       isHome: false,
-      tactic: awaySetup.tactic,
-      defenseSetup: awaySetup.defenseSetup,
-      players: awaySetup.lineupSlots.map(slot => ({
+      tactic: awaySetup?.tactic || "NORMAL",
+      defenseSetup: awaySetup?.defenseSetup || "ZONAL",
+      players: awaySetup?.lineupSlots.map(slot => ({
         ...slot.player,
-        // Формируем имя для логов: "Фамилия Имя"
         name: `${slot.player.lastName} ${slot.player.firstName}`,
         assignedPosition: slot.assignedPosition
-      }))
+      })) || []
     };
 
     // 4. Запуск генератора
-    const result = playMatch(engineHome as any, engineAway as any);
-
-    // 5. Сохранение результата (чистим undefined через JSON)
+    // @ts-ignore
+    const result = playMatch(engineHome, engineAway);
     const reportData = JSON.parse(JSON.stringify(result));
 
-    await prisma.match.update({
-      where: { id },
-      data: {
-        homeScore: result.homeScore,
-        awayScore: result.awayScore,
-        status: "FINISHED",
-        report: reportData 
-      }
-    });
+    // 5. Транзакция: Обновляем матч + Обновляем статистику команд
+    const homePoints = result.homeScore > result.awayScore ? 3 : (result.homeScore === result.awayScore ? 1 : 0);
+    const awayPoints = result.awayScore > result.homeScore ? 3 : (result.awayScore === result.homeScore ? 1 : 0);
+
+    await prisma.$transaction([
+      // A. Обновляем сам матч
+      prisma.match.update({
+        where: { id },
+        data: {
+          homeScore: result.homeScore,
+          awayScore: result.awayScore,
+          status: "FINISHED",
+          report: reportData 
+        }
+      }),
+
+      // B. Обновляем Хозяев
+      prisma.team.update({
+        where: { id: match.homeTeamId },
+        data: {
+          played: { increment: 1 },
+          wins: { increment: result.homeScore > result.awayScore ? 1 : 0 },
+          draws: { increment: result.homeScore === result.awayScore ? 1 : 0 },
+          losses: { increment: result.homeScore < result.awayScore ? 1 : 0 },
+          goalsScored: { increment: result.homeScore },
+          goalsConceded: { increment: result.awayScore },
+          goalsDiff: { increment: result.homeScore - result.awayScore },
+          points: { increment: homePoints }
+        }
+      }),
+
+      // C. Обновляем Гостей
+      prisma.team.update({
+        where: { id: match.awayTeamId },
+        data: {
+          played: { increment: 1 },
+          wins: { increment: result.awayScore > result.homeScore ? 1 : 0 },
+          draws: { increment: result.awayScore === result.homeScore ? 1 : 0 },
+          losses: { increment: result.awayScore < result.homeScore ? 1 : 0 },
+          goalsScored: { increment: result.awayScore },
+          goalsConceded: { increment: result.homeScore },
+          goalsDiff: { increment: result.awayScore - result.homeScore },
+          points: { increment: awayPoints }
+        }
+      })
+    ]);
 
     // 6. Обновление кэша
     revalidatePath(`/admin/matches/${id}`);
     revalidatePath(`/admin/teams/${match.homeTeamId}`);
     revalidatePath(`/admin/teams/${match.awayTeamId}`);
+    revalidatePath(`/admin/leagues/${match.leagueId}`);
 
     return NextResponse.json({ success: true, result: reportData });
 
@@ -117,26 +144,67 @@ export async function DELETE(
 
     const match = await prisma.match.findUnique({
       where: { id },
-      select: { homeTeamId: true, awayTeamId: true }
-    });
-
-    if (!match) {
-      return NextResponse.json({ error: "Матч не найден" }, { status: 404 });
-    }
-
-    await prisma.match.update({
-      where: { id },
-      data: {
-        homeScore: null,
-        awayScore: null,
-        status: "UPCOMING",
-        report: Prisma.DbNull 
+      select: { 
+        homeTeamId: true, 
+        awayTeamId: true, 
+        homeScore: true, 
+        awayScore: true,
+        status: true,
+        leagueId: true
       }
     });
 
+    if (!match || match.status !== "FINISHED" || match.homeScore === null || match.awayScore === null) {
+      return NextResponse.json({ error: "Матч не сыгран или не найден" }, { status: 400 });
+    }
+
+    const { homeScore, awayScore } = match;
+    const homePoints = homeScore > awayScore ? 3 : (homeScore === awayScore ? 1 : 0);
+    const awayPoints = awayScore > homeScore ? 3 : (awayScore === homeScore ? 1 : 0);
+
+    // Откатываем статистику (decrement)
+    await prisma.$transaction([
+      prisma.match.update({
+        where: { id },
+        data: {
+          homeScore: null,
+          awayScore: null,
+          status: "UPCOMING",
+          report: Prisma.DbNull 
+        }
+      }),
+
+      prisma.team.update({
+        where: { id: match.homeTeamId },
+        data: {
+          played: { decrement: 1 },
+          wins: { decrement: homeScore > awayScore ? 1 : 0 },
+          draws: { decrement: homeScore === awayScore ? 1 : 0 },
+          losses: { decrement: homeScore < awayScore ? 1 : 0 },
+          goalsScored: { decrement: homeScore },
+          goalsConceded: { decrement: awayScore },
+          goalsDiff: { decrement: homeScore - awayScore },
+          points: { decrement: homePoints }
+        }
+      }),
+
+      prisma.team.update({
+        where: { id: match.awayTeamId },
+        data: {
+          played: { decrement: 1 },
+          wins: { decrement: awayScore > homeScore ? 1 : 0 },
+          draws: { decrement: awayScore === homeScore ? 1 : 0 },
+          losses: { decrement: awayScore < homeScore ? 1 : 0 },
+          goalsScored: { decrement: awayScore },
+          goalsConceded: { decrement: homeScore },
+          goalsDiff: { decrement: awayScore - homeScore },
+          points: { decrement: awayPoints }
+        }
+      })
+    ]);
+
     revalidatePath(`/admin/matches/${id}`);
-    revalidatePath(`/admin/teams/${match.homeTeamId}`);
-    revalidatePath(`/admin/teams/${match.awayTeamId}`);
+    revalidatePath(`/admin/leagues/${match.leagueId}`);
     
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -9,8 +9,9 @@ import Link from "next/link";
 
 export default async function TeamDetailsDashboard({ params, searchParams }: any) {
   const { id } = await params;
-  const { sort = 'pos', direction = 'asc', tab = 'players' } = await searchParams;
+  const { sort = 'pos', direction = 'asc', tab = 'players', seasonId } = await searchParams;
 
+  // 1. Загружаем команду и матчи
   const team = await prisma.team.findUnique({
     where: { id },
     include: { 
@@ -37,46 +38,52 @@ export default async function TeamDetailsDashboard({ params, searchParams }: any
 
   if (!team) notFound();
 
-  // 1. Ищем ближайший предстоящий матч
+  // 2. Загружаем список сезонов для фильтра
+  const seasons = await prisma.season.findMany({ orderBy: { year: 'desc' } });
+  
+  // Определяем активный сезон для отображения (из URL или последний)
+  const activeSeasonId = seasonId || seasons[0]?.id;
+
+  // 3. Обработка матчей
   const allMatchesRaw = [...team.homeMatches, ...team.awayMatches];
-  const upcomingMatch = allMatchesRaw
-    .filter(m => (m.status as string) !== 'FINISHED')
+
+  // Сортировка (сначала сезон, потом тур)
+  const sortedMatches = allMatchesRaw.sort((a, b) => {
+    if (b.season.year !== a.season.year) return b.season.year - a.season.year;
+    return a.tour - b.tour;
+  });
+
+  // Фильтруем матчи для вкладки "Матчи" (только выбранный сезон)
+  const filteredMatches = sortedMatches.filter(m => m.seasonId === activeSeasonId);
+
+  // 4. Поиск ближайшего матча (ВСЕГДА в будущем, независимо от выбранного сезона в фильтре)
+  // Берем матчи последнего сезона или будущие
+  const latestSeasonId = seasons[0]?.id;
+  const upcomingMatch = sortedMatches
+    .filter(m => (m.status as string) !== 'FINISHED' && m.seasonId === latestSeasonId)
     .sort((a, b) => a.tour - b.tour)[0];
 
-  // 2. Проверяем, отправлен ли состав (MatchSetup)
+  // 5. Проверка состава
   let hasSetup = false;
   if (upcomingMatch) {
     try {
-      // Пытаемся найти модель. В Prisma Client она обычно matchSetup или setup.
-      // Мы используем безопасный вызов, чтобы не падать с ошибкой 'undefined'
-      const setupModel = (prisma as any).matchSetup || (prisma as any).setup;
-      
-      if (setupModel) {
-        const setup = await setupModel.findFirst({
-          where: {
-            matchId: upcomingMatch.id,
-            teamId: id
-          }
-        });
-        hasSetup = !!setup;
-      }
+      const setup = await prisma.matchTeamSetup.findUnique({
+        where: {
+          matchId_teamId: { matchId: upcomingMatch.id, teamId: id }
+        }
+      });
+      hasSetup = !!setup;
     } catch (e) {
-      console.error("Ошибка при поиске MatchSetup:", e);
+      console.error("Match setup check error:", e);
     }
   }
 
-  const allMatches = allMatchesRaw.sort((a, b) => {
-    if (a.tour !== b.tour) return a.tour - b.tour;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
-
   const tabs = [
-    { name: 'Игроки', href: `/admin/teams/${id}?tab=players`, key: 'players' },
-    { name: 'Матчи', href: `/admin/teams/${id}?tab=matches`, key: 'matches' },
+    { name: 'Игроки', href: `/admin/teams/${id}?tab=players&seasonId=${activeSeasonId}`, key: 'players' },
+    { name: 'Матчи', href: `/admin/teams/${id}?tab=matches&seasonId=${activeSeasonId}`, key: 'matches' },
     { name: 'Сделки', href: '#', key: 'deals' },
     { name: 'События', href: '#', key: 'events' },
     { name: 'Финансы', href: '#', key: 'finance' },
-    { name: 'Статистика', href: '#', key: 'stats' },
     { name: 'Трофеи', href: '#', key: 'trophies' },
   ];
 
@@ -118,7 +125,12 @@ export default async function TeamDetailsDashboard({ params, searchParams }: any
 
           {tab === 'matches' && (
             <div className="w-full">
-              <TeamMatches matches={allMatches} teamId={id} />
+              <TeamMatches 
+                matches={filteredMatches} 
+                teamId={id} 
+                seasons={seasons}
+                activeSeasonId={activeSeasonId}
+              />
             </div>
           )}
         </div>

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { Sidebar } from "@/components/admin/Sidebar"; // Горизонтальный Navbar
+import { Sidebar } from "@/components/admin/Sidebar";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Trophy, Settings, Plus, Shield, ChevronRight, Activity } from "lucide-react";
+import { ArrowLeft, Activity, Settings } from "lucide-react";
 import Link from "next/link";
 import { GenerateCalendarModal } from "@/components/admin/GenerateCalendarModal";
 import { SimulateTourButton } from "@/components/admin/SimulateTourButton";
@@ -11,26 +11,22 @@ export default async function LeagueDetailsPage({
   searchParams 
 }: { 
   params: Promise<{ id: string }>,
-  searchParams: Promise<{ tour?: string, seasonId?: string }>
+  searchParams: Promise<{ tour?: string }>
 }) {
   const { id } = await params;
-  const { tour, seasonId } = await searchParams;
+  const { tour } = await searchParams;
 
-  const seasons = await prisma.season.findMany({ orderBy: { year: 'desc' } });
-  const activeSeasonId = seasonId || seasons[0]?.id;
-
+  // Загружаем данные лиги
   const league = await prisma.league.findUnique({
     where: { id },
     include: {
       country: true,
-      teams: {
-        include: {
-          homeMatches: { where: { leagueId: id, seasonId: activeSeasonId } },
-          awayMatches: { where: { leagueId: id, seasonId: activeSeasonId } },
-        }
-      },
+      season: true,
+      // Загружаем команды, которые ПРЯМО СЕЙЧАС привязаны к лиге (для нового сезона)
+      teams: true,
+      // Загружаем матчи этой лиги (для истории и расчета таблицы)
       matches: {
-        where: { seasonId: activeSeasonId },
+        orderBy: { tour: 'asc' },
         include: { homeTeam: true, awayTeam: true }
       }
     }
@@ -38,43 +34,54 @@ export default async function LeagueDetailsPage({
 
   if (!league) notFound();
 
-  // 1. Убираем дубликаты
-  const uniqueMatchesMap = new Map();
+  // --- ЛОГИКА ВОССТАНОВЛЕНИЯ ИСТОРИИ ---
+  
+  // 1. Собираем уникальные команды из матчей (это надежнее для прошлых сезонов)
+  const teamsMap = new Map<string, any>();
+  
   league.matches.forEach(m => {
-    const key = `${[m.homeTeamId, m.awayTeamId].sort().join('-')}-${m.tour}`;
-    if (!uniqueMatchesMap.has(key)) uniqueMatchesMap.set(key, m);
+    if (!teamsMap.has(m.homeTeamId)) teamsMap.set(m.homeTeamId, { ...m.homeTeam, stats: initStats() });
+    if (!teamsMap.has(m.awayTeamId)) teamsMap.set(m.awayTeamId, { ...m.awayTeam, stats: initStats() });
   });
-  const uniqueMatches = Array.from(uniqueMatchesMap.values());
 
-  // 2. Расчет турнирной таблицы
-  const table = league.teams.map(team => {
-    let stats = { played: 0, win: 0, draw: 0, loss: 0, goalsFor: 0, goalsAgainst: 0, points: 0 };
-    
-    [...team.homeMatches, ...team.awayMatches]
-      .filter(m => m.status === 'FINISHED')
-      .forEach(m => {
-        stats.played++;
-        const isHome = m.homeTeamId === team.id;
-        const myScore = isHome ? m.homeScore! : m.awayScore!;
-        const oppScore = isHome ? m.awayScore! : m.homeScore!;
-        stats.goalsFor += myScore;
-        stats.goalsAgainst += oppScore;
-        if (myScore > oppScore) { stats.win++; stats.points += 3; }
-        else if (myScore === oppScore) { stats.draw++; stats.points += 1; }
-        else stats.loss++;
-      });
-    return { ...team, ...stats };
-  }).sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst));
+  // 2. Если матчей нет (старт сезона), берем команды из текущей привязки
+  if (teamsMap.size === 0) {
+    league.teams.forEach(t => {
+      teamsMap.set(t.id, { ...t, stats: initStats() });
+    });
+  }
 
-  const toursCount = Math.max(...uniqueMatches.map(m => m.tour), 0);
+  // 3. Рассчитываем таблицу по сыгранным матчам
+  league.matches.forEach(m => {
+    if (m.status === 'FINISHED' && m.homeScore !== null && m.awayScore !== null) {
+      const home = teamsMap.get(m.homeTeamId);
+      const away = teamsMap.get(m.awayTeamId);
+
+      if (home && away) {
+        updateStats(home.stats, m.homeScore, m.awayScore);
+        updateStats(away.stats, m.awayScore, m.homeScore);
+      }
+    }
+  });
+
+  // 4. Превращаем Map в массив и сортируем
+  const table = Array.from(teamsMap.values()).sort((a, b) => {
+    const pts = b.stats.points - a.stats.points;
+    if (pts !== 0) return pts;
+    const diff = (b.stats.goalsFor - b.stats.goalsAgainst) - (a.stats.goalsFor - a.stats.goalsAgainst);
+    if (diff !== 0) return diff;
+    return b.stats.goalsFor - a.stats.goalsFor;
+  });
+
+  // Данные для UI
+  const toursCount = Math.max(...league.matches.map(m => m.tour), 0);
   const currentTour = tour ? parseInt(tour) : 1;
-  const tourMatches = uniqueMatches.filter(m => m.tour === currentTour);
+  const tourMatches = league.matches.filter(m => m.tour === currentTour);
 
   return (
     <div className="min-h-screen bg-[#f2f5f7] flex flex-col font-sans">
       <Sidebar />
 
-      {/* SUB-HEADER (Breadcrumbs & Actions) */}
       <div className="bg-white border-b border-gray-200 px-8 py-4 shrink-0">
         <div className="max-w-[1200px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -85,28 +92,19 @@ export default async function LeagueDetailsPage({
               {league.country.flag && (
                 <img src={league.country.flag} alt="" className="w-6 h-4 object-cover border border-gray-100 shadow-sm" />
               )}
-              <h1 className="text-xl font-black uppercase tracking-tighter italic text-[#000c2d]">
-                {league.country.name}: <span className="text-[#e30613]">{league.name}</span>
-              </h1>
+              <div>
+                <h1 className="text-xl font-black uppercase tracking-tighter italic text-[#000c2d]">
+                  {league.country.name}: <span className="text-[#e30613]">{league.name}</span>
+                </h1>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+                  Сезон {league.season?.year}
+                </p>
+              </div>
             </div>
           </div>
           
           <div className="flex items-center gap-4">
-            {/* СЕЗОНЫ */}
-            <div className="flex bg-gray-100 p-1 rounded-sm border border-gray-200">
-              {seasons.map(s => (
-                <Link 
-                  key={s.id} 
-                  href={`?seasonId=${s.id}`} 
-                  className={`px-3 py-1 rounded-sm text-[9px] font-black uppercase transition-all ${
-                    activeSeasonId === s.id ? 'bg-[#000c2d] text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  S{s.year % 100}
-                </Link>
-              ))}
-            </div>
-            <GenerateCalendarModal leagueId={league.id} teamsCount={league.teams.length} />
+            <GenerateCalendarModal leagueId={league.id} teamsCount={table.length} />
             <Link href={`/admin/leagues/edit/${league.id}`} className="p-2 text-gray-400 hover:text-[#000c2d] transition-colors">
               <Settings size={18} />
             </Link>
@@ -117,7 +115,7 @@ export default async function LeagueDetailsPage({
       <main className="flex-1 overflow-y-auto custom-scrollbar p-8">
         <div className="max-w-[1200px] mx-auto space-y-8">
           
-          {/* РАСПИСАНИЕ И ТУРЫ */}
+          {/* КАЛЕНДАРЬ */}
           <div className="bg-white shadow-sm border border-gray-200">
             <div className="bg-[#1a3151] p-3 flex justify-between items-center text-white">
               <div className="flex items-center gap-3">
@@ -125,14 +123,14 @@ export default async function LeagueDetailsPage({
                  <h2 className="text-[10px] font-black uppercase tracking-[0.2em]">Календарь игр</h2>
               </div>
               <div className="flex items-center gap-4">
-                {activeSeasonId && (
-                  <SimulateTourButton leagueId={id} tour={currentTour} seasonId={activeSeasonId} />
+                {league.season?.status === 'ACTIVE' && (
+                  <SimulateTourButton leagueId={id} tour={currentTour} seasonId={league.seasonId} />
                 )}
                 <div className="flex gap-1 overflow-x-auto max-w-[400px] no-scrollbar px-2 border-l border-white/10 ml-2">
                   {Array.from({ length: toursCount }, (_, i) => i + 1).map(t => (
                     <Link 
                       key={t} 
-                      href={`?tour=${t}&seasonId=${activeSeasonId}`} 
+                      href={`?tour=${t}`} 
                       className={`min-w-[24px] h-6 flex items-center justify-center text-[9px] font-bold rounded-sm transition-all ${
                         currentTour === t ? 'bg-[#e30613] text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
                       }`}
@@ -184,7 +182,7 @@ export default async function LeagueDetailsPage({
             </div>
           </div>
 
-          {/* ТУРНИРНАЯ ТАБЛИЦА (Transfermarkt Style) */}
+          {/* ТАБЛИЦА */}
           <div className="bg-white shadow-sm border border-gray-200 overflow-hidden">
             <div className="bg-[#000c2d] px-6 py-3">
                <h2 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Положение команд</h2>
@@ -214,14 +212,21 @@ export default async function LeagueDetailsPage({
                         {team.name}
                       </Link>
                     </td>
-                    <td className="p-4 text-center font-medium">{team.played}</td>
-                    <td className="p-4 text-center text-gray-600 font-medium">{team.win}</td>
-                    <td className="p-4 text-center text-gray-400 font-medium">{team.draw}</td>
-                    <td className="p-4 text-center text-gray-400 font-medium">{team.loss}</td>
-                    <td className="p-4 text-center text-gray-500 font-medium tabular-nums">{team.goalsFor}:{team.goalsAgainst}</td>
-                    <td className="p-4 text-center font-black bg-gray-50/50 text-[#000c2d] border-l border-gray-200">{team.points}</td>
+                    <td className="p-4 text-center font-medium">{team.stats.played}</td>
+                    <td className="p-4 text-center text-gray-600 font-medium">{team.stats.win}</td>
+                    <td className="p-4 text-center text-gray-400 font-medium">{team.stats.draw}</td>
+                    <td className="p-4 text-center text-gray-400 font-medium">{team.stats.loss}</td>
+                    <td className="p-4 text-center text-gray-500 font-medium tabular-nums">
+                      {team.stats.goalsFor}:{team.stats.goalsAgainst}
+                    </td>
+                    <td className="p-4 text-center font-black bg-gray-50/50 text-[#000c2d] border-l border-gray-200">
+                      {team.stats.points}
+                    </td>
                   </tr>
                 ))}
+                {table.length === 0 && (
+                  <tr><td colSpan={8} className="p-8 text-center text-gray-400 text-xs">Нет данных</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -229,4 +234,24 @@ export default async function LeagueDetailsPage({
       </main>
     </div>
   );
+}
+
+// Утилиты для статистики
+function initStats() {
+  return { played: 0, win: 0, draw: 0, loss: 0, goalsFor: 0, goalsAgainst: 0, points: 0 };
+}
+
+function updateStats(stats: any, scored: number, conceded: number) {
+  stats.played++;
+  stats.goalsFor += scored;
+  stats.goalsAgainst += conceded;
+  if (scored > conceded) {
+    stats.win++;
+    stats.points += 3;
+  } else if (scored === conceded) {
+    stats.draw++;
+    stats.points += 1;
+  } else {
+    stats.loss++;
+  }
 }
