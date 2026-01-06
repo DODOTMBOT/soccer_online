@@ -3,34 +3,35 @@
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/admin/Sidebar";
 import { 
-  Plus, Loader2, Trophy, Calendar, CheckCircle2, History, 
-  LayoutTemplate, Users, PlayCircle 
+  Plus, Loader2, Trophy, Calendar, History, 
+  LayoutTemplate, Users, PlayCircle, Trash2 
 } from "lucide-react";
 
 export default function SeasonsPage() {
   const [seasons, setSeasons] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  
-  // Состояние для отслеживания, какая кнопка настройки сейчас нажата
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchSeasons = async () => {
-    const res = await fetch("/api/admin/seasons");
-    const data = await res.json();
-    setSeasons(data);
+    try {
+      const res = await fetch("/api/admin/seasons");
+      if (res.ok) {
+        const data = await res.json();
+        setSeasons(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   useEffect(() => { fetchSeasons(); }, []);
 
   const createSeason = async () => {
-    // 1. Спрашиваем номер сезона у пользователя
-    const input = prompt("Введите номер/год нового сезона (например: 1, 2, 2026...):");
-    
-    // Если нажали "Отмена" или ничего не ввели
+    const input = prompt("Введите номер/год нового сезона (например: 2027):");
     if (input === null || input.trim() === "") return;
 
     const year = parseInt(input);
-    
     if (isNaN(year)) {
       alert("Ошибка: Вы должны ввести число!");
       return;
@@ -40,29 +41,38 @@ export default function SeasonsPage() {
     
     setLoading(true);
     try {
-      // 2. Отправляем введенный год на сервер
       const res = await fetch("/api/admin/seasons", { 
         method: "POST",
         body: JSON.stringify({ year }),
         headers: { "Content-Type": "application/json" }
       });
-      
       const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(json.error || "Ошибка создания сезона");
-      }
-
+      if (!res.ok) throw new Error(json.error);
       await fetchSeasons();
     } catch (e: any) {
-      console.error(e);
       alert(`Ошибка: ${e.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Универсальная функция для запуска шагов настройки
+  const deleteSeason = async (id: string, year: number) => {
+    if (!confirm(`⚠️ ВНИМАНИЕ! Вы собираетесь удалить Сезон ${year}.\n\nЭто БЕЗВОЗВРАТНО удалит:\n- Все лиги этого сезона\n- Все команды в этих лигах\n- Всех игроков и матчи\n\nВы уверены?`)) return;
+
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/admin/seasons/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Ошибка удаления");
+      
+      // Удаляем из локального стейта, чтобы не ждать фетча
+      setSeasons(prev => prev.filter(s => s.id !== id));
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const runSetupStep = async (seasonId: string, endpoint: string, actionKey: string) => {
     setActionLoading(`${seasonId}-${actionKey}`);
     try {
@@ -72,12 +82,9 @@ export default function SeasonsPage() {
         headers: { "Content-Type": "application/json" }
       });
       const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error || "Ошибка");
-      
+      if (!res.ok) throw new Error(data.error);
       alert(`✅ Успешно! \n${JSON.stringify(data.message || data.success)}`);
     } catch (e: any) {
-      console.error(e);
       alert(`❌ Ошибка: ${e.message}`);
     } finally {
       setActionLoading(null);
@@ -88,7 +95,6 @@ export default function SeasonsPage() {
     <div className="min-h-screen bg-[#f2f5f7] flex flex-col font-sans">
       <Sidebar />
 
-      {/* SUB-HEADER / ACTIONS */}
       <div className="bg-white border-b border-gray-200 px-8 py-4 shrink-0">
         <div className="max-w-[1200px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -119,7 +125,6 @@ export default function SeasonsPage() {
       <main className="flex-1 overflow-y-auto custom-scrollbar p-8">
         <div className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
-          {/* КАРТОЧКИ СЕЗОНОВ */}
           {seasons.map((s) => (
             <div 
               key={s.id} 
@@ -133,17 +138,28 @@ export default function SeasonsPage() {
                     <Trophy size={18} />
                   </div>
                   
-                  {s.status === 'ACTIVE' ? (
-                    <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1 rounded-sm border border-emerald-100">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Текущий</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded-sm border border-gray-100">
-                        <History size={10} className="text-gray-400" />
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Архив</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {s.status === 'ACTIVE' ? (
+                        <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1 rounded-sm border border-emerald-100">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Active</span>
+                        </div>
+                    ) : (
+                        <div className="bg-gray-50 px-3 py-1 rounded-sm border border-gray-100">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Archive</span>
+                        </div>
+                    )}
+                    
+                    {/* КНОПКА УДАЛЕНИЯ */}
+                    <button 
+                      onClick={() => deleteSeason(s.id, s.year)}
+                      disabled={deletingId === s.id}
+                      className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-sm transition-all"
+                      title="Удалить сезон"
+                    >
+                      {deletingId === s.id ? <Loader2 size={14} className="animate-spin text-red-600"/> : <Trash2 size={14} />}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -163,7 +179,6 @@ export default function SeasonsPage() {
                         </p>
                         
                         <div className="space-y-2">
-                            {/* ШАГ 1: ЛИГИ */}
                             <button 
                                 onClick={() => runSetupStep(s.id, "/api/admin/seasons/init-leagues", "init")}
                                 disabled={!!actionLoading}
@@ -176,7 +191,6 @@ export default function SeasonsPage() {
                                 {actionLoading === `${s.id}-init` && <Loader2 size={12} className="animate-spin"/>}
                             </button>
 
-                            {/* ШАГ 2: КОМАНДЫ */}
                             <button 
                                 onClick={() => runSetupStep(s.id, "/api/admin/seasons/generate-teams", "teams")}
                                 disabled={!!actionLoading}
@@ -189,7 +203,6 @@ export default function SeasonsPage() {
                                 {actionLoading === `${s.id}-teams` && <Loader2 size={12} className="animate-spin"/>}
                             </button>
 
-                            {/* ШАГ 3: КАЛЕНДАРЬ */}
                             <button 
                                 onClick={() => runSetupStep(s.id, "/api/admin/seasons/generate-calendar", "calendar")}
                                 disabled={!!actionLoading}
@@ -206,14 +219,12 @@ export default function SeasonsPage() {
                 )}
               </div>
 
-              {/* Декоративный номер на фоне */}
               <div className="absolute -right-4 -bottom-6 text-[#f2f5f7] font-black text-[120px] italic opacity-100 select-none group-hover:text-gray-100 transition-colors pointer-events-none -z-0">
                 {s.year % 100}
               </div>
             </div>
           ))}
 
-          {/* Если пусто */}
           {seasons.length === 0 && !loading && (
             <div className="col-span-full py-20 text-center bg-white border border-dashed border-gray-300 rounded-sm">
                 <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">
