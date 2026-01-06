@@ -12,16 +12,29 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    // 1. Находим последний номер сезона
-    const lastSeason = await prisma.season.findFirst({
-      orderBy: { year: 'desc' }
+    const body = await req.json();
+    let { year } = body;
+
+    // Если год/номер не пришел, пробуем посчитать автоматически
+    if (!year) {
+      const lastSeason = await prisma.season.findFirst({
+        orderBy: { year: 'desc' }
+      });
+      year = lastSeason ? lastSeason.year + 1 : 1;
+    }
+
+    // Проверяем, не существует ли уже такой сезон
+    const existing = await prisma.season.findUnique({
+      where: { year: year }
     });
 
-    const nextYear = lastSeason ? lastSeason.year + 1 : 1;
+    if (existing) {
+      return NextResponse.json({ error: `Сезон ${year} уже существует!` }, { status: 400 });
+    }
 
-    // 2. Используем транзакцию, чтобы гарантированно сначала закрыть старые, а потом открыть новый
+    // Используем транзакцию, чтобы гарантированно сначала закрыть старые, а потом открыть новый
     const result = await prisma.$transaction(async (tx) => {
       
       // Завершаем ВСЕ предыдущие сезоны, которые имели статус ACTIVE
@@ -30,10 +43,10 @@ export async function POST() {
         data: { status: "FINISHED" }
       });
 
-      // Создаем новый сезон со статусом ACTIVE
+      // Создаем новый сезон с указанным номером и статусом ACTIVE
       const newSeason = await tx.season.create({
         data: { 
-          year: nextYear, 
+          year: year, 
           status: "ACTIVE" 
         }
       });
@@ -42,8 +55,8 @@ export async function POST() {
     });
 
     return NextResponse.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error("SEASON_POST_ERROR:", error);
-    return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Ошибка сервера" }, { status: 500 });
   }
 }

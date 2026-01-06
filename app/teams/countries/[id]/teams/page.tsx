@@ -22,16 +22,8 @@ export default function FederationTeamsPage() {
       
       if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
 
-      const text = await res.text();
-      if (!text) {
-        setTeams([]);
-        return;
-      }
-      const data = JSON.parse(text);
-
-      // Сортировка
-      data.sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
-
+      const data = await res.json();
+      // Сортировка уже есть в API, но на всякий случай оставляем
       setTeams(data);
     } catch (err) {
       console.error("Fetch error:", err);
@@ -53,7 +45,7 @@ export default function FederationTeamsPage() {
         <div className="max-w-[1200px] mx-auto space-y-8">
           
           <div className="flex items-center justify-between">
-             <h1 className="text-2xl font-bold text-[#1a3151]">Команды федерации</h1>
+             <h1 className="text-2xl font-bold text-[#1a3151] uppercase italic">Команды федерации</h1>
           </div>
 
           <div className="bg-white shadow-sm border border-gray-200 rounded-sm overflow-hidden">
@@ -93,19 +85,29 @@ export default function FederationTeamsPage() {
                           )}
                         </div>
                         <div>
-                          <Link href={`/admin/teams/${team.id}`} className="block font-bold text-[#1a3151] hover:text-[#e30613] transition-colors">
+                          {/* Ссылка на страницу команды */}
+                          <Link href={`/teams/${team.id}`} className="block font-bold text-[#1a3151] hover:text-[#e30613] transition-colors uppercase">
                             {team.name}
                           </Link>
                           {team.stadium && (
-                             <span className="text-xs text-gray-400 font-normal">{team.stadium}</span>
+                             <span className="text-[10px] text-gray-400 font-bold uppercase italic">{team.stadium}</span>
                           )}
                         </div>
                       </div>
                     </td>
 
-                    {/* ЛИГА */}
-                    <td className="px-6 py-4 border border-gray-100 text-[#1a3151] text-center whitespace-nowrap font-medium">
-                       {team.league?.name || "—"}
+                    {/* ЛИГА — Теперь кликабельная */}
+                    <td className="px-6 py-4 border border-gray-100 text-center whitespace-nowrap">
+                       {team.league ? (
+                         <Link 
+                           href={`/leagues/${team.league.id}`} 
+                           className="text-[10px] font-black uppercase text-[#1a3151] bg-gray-100 px-3 py-1 rounded-sm hover:bg-[#e30613] hover:text-white transition-all"
+                         >
+                           {team.league.name}
+                         </Link>
+                       ) : (
+                         <span className="text-gray-300 text-[10px] font-bold uppercase">Вне лиги</span>
+                       )}
                     </td>
 
                     {/* МЕНЕДЖЕР */}
@@ -116,7 +118,7 @@ export default function FederationTeamsPage() {
                            <span className="font-semibold text-xs">{team.manager.login || team.manager.name}</span>
                         </div>
                       ) : (
-                        <span className="text-gray-400 text-[10px] uppercase tracking-wider">Вакантно</span>
+                        <span className="text-gray-400 text-[10px] uppercase tracking-wider font-bold">Вакантно</span>
                       )}
                     </td>
 

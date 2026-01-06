@@ -6,9 +6,12 @@ import { Sidebar } from "@/components/admin/Sidebar";
 import { 
   Users, ArrowLeft, Loader2, Save, Shield, Settings, Info
 } from "lucide-react";
-import { Philosophy, DefenseSetup, Formation, Mentality, TeamSpirit } from "@prisma/client";
+// Обновленные импорты согласно схеме
+import { VflStyle, DefenseType, Formation, Mentality, TeamSpirit } from "@prisma/client";
 
-const PHILOSOPHY_NAMES: Record<Philosophy, string> = {
+// Соответствие стилей VflStyle
+const TACTIC_NAMES: Record<VflStyle, string> = {
+  NORMAL: "Нормальный",
   TIKI_TAKA: "Тики Така",
   JOGA_BONITO: "Joga Bonito",
   INTENSIVO: "Интенсивный",
@@ -17,12 +20,13 @@ const PHILOSOPHY_NAMES: Record<Philosophy, string> = {
   BUS: "Автобус"
 };
 
+// Соответствие менталитетов Mentality
 const MENTALITY_NAMES: Record<Mentality, string> = {
-  ULTRA_DEFENSIVE: "Суперзащитный",
+  SUPER_DEFENSIVE: "Суперзащитный",
   DEFENSIVE: "Защитный",
-  BALANCED: "Сбалансированный",
+  NORMAL: "Нормальный", // Вместо BALANCED
   ATTACKING: "Атакующий",
-  ULTRA_ATTACKING: "Суператакующий"
+  ALL_OUT_ATTACK: "Все в атаку"
 };
 
 const SPIRIT_NAMES: Record<TeamSpirit, string> = {
@@ -42,11 +46,11 @@ export default function MatchLineupPage({ params }: { params: Promise<{ id: stri
   const [lineup, setLineup] = useState<Record<number, string>>({});
   const [subs, setSubs] = useState<Record<number, string>>({});
   
-  // Поля из БД
-  const [tactic, setTactic] = useState<Philosophy>("TIKI_TAKA");
-  const [defense, setDefense] = useState<DefenseSetup>("ZONAL");
+  // Поля инициализированы актуальными значениями из схемы
+  const [tactic, setTactic] = useState<VflStyle>("NORMAL");
+  const [defense, setDefense] = useState<DefenseType>("ZONAL");
   const [formation, setFormation] = useState<Formation>("F442");
-  const [mentality, setMentality] = useState<Mentality>("BALANCED");
+  const [mentality, setMentality] = useState<Mentality>("NORMAL");
   const [spirit, setSpirit] = useState<TeamSpirit>("NORMAL");
 
   const [loading, setLoading] = useState(true);
@@ -87,10 +91,10 @@ export default function MatchLineupPage({ params }: { params: Promise<{ id: stri
           });
           setLineup(newLineup);
           setSubs(newSubs);
-          setTactic(existing.tactic || "TIKI_TAKA");
+          setTactic(existing.tactic || "NORMAL");
           setDefense(existing.defenseSetup || "ZONAL");
           setFormation(existing.formation || "F442");
-          setMentality(existing.mentality || "BALANCED");
+          setMentality(existing.mentality || "NORMAL");
           setSpirit(existing.spirit || "NORMAL");
         }
       } catch (e: any) {
@@ -207,10 +211,10 @@ export default function MatchLineupPage({ params }: { params: Promise<{ id: stri
                <label className="text-[8px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Стиль игры</label>
                <select 
                  value={tactic} 
-                 onChange={(e) => setTactic(e.target.value as Philosophy)} 
+                 onChange={(e) => setTactic(e.target.value as VflStyle)} 
                  className="w-full p-1.5 bg-gray-50 border border-gray-200 text-[10px] font-bold outline-none"
                >
-                 {Object.values(Philosophy).map(p => <option key={p} value={p}>{PHILOSOPHY_NAMES[p]}</option>)}
+                 {Object.values(VflStyle).map(p => <option key={p} value={p}>{TACTIC_NAMES[p]}</option>)}
                </select>
             </div>
             <div className="col-span-12 lg:col-span-3 bg-white border border-gray-200 p-3 shadow-sm">
@@ -310,45 +314,41 @@ export default function MatchLineupPage({ params }: { params: Promise<{ id: stri
 function renderFormation(f: Formation, players: any[], lineup: any, busyIds: string[], onSelect: any) {
   const GK = <Slot index={0} label="GK" value={lineup[0]} players={players} busyIds={busyIds} onSelect={onSelect} />;
   
-  // Конфигурации линий
-  const lines: Record<Formation, React.ReactNode[]> = {
+  const lines: Record<string, React.ReactNode[]> = {
     F442: [
-      <div className="flex justify-around"><Slot index={9} label="CF" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={10} label="CF" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-around"><Slot index={5} label="LM" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={6} label="CM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="CM" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="RM" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-around pt-10"><Slot index={1} label="LD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="CD" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={4} label="RD" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
+      <div key="fw" className="flex justify-around"><Slot index={9} label="CF" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={10} label="CF" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="mf" className="flex justify-around"><Slot index={5} label="LM" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={6} label="CM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="CM" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="RM" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="df" className="flex justify-around pt-10"><Slot index={1} label="LD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="CD" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={4} label="RD" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
     ],
     F433: [
-      <div className="flex justify-around"><Slot index={9} label="LW" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={10} label="ST" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="RW" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-around"><Slot index={5} label="CM" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={6} label="DM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="CM" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-around pt-10"><Slot index={1} label="LD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="CD" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={4} label="RD" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
+      <div key="fw" className="flex justify-around"><Slot index={9} label="LF" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={10} label="ST" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="RF" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="mf" className="flex justify-around"><Slot index={5} label="CM" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={6} label="DM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="CM" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="df" className="flex justify-around pt-10"><Slot index={1} label="LD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="CD" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={4} label="RD" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
     ],
     F424: [
-      <div className="flex justify-around"><Slot index={10} label="LW" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={9} label="CF" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="CF" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="RW" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-center gap-20"><Slot index={5} label="CM" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={6} label="CM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-around pt-10"><Slot index={1} label="LD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="CD" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={4} label="RD" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
+      <div key="fw" className="flex justify-around"><Slot index={10} label="LF" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={9} label="CF" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="CF" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="RF" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="mf" className="flex justify-center gap-20"><Slot index={5} label="CM" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={6} label="CM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="df" className="flex justify-around pt-10"><Slot index={1} label="LD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="CD" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={4} label="RD" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
     ],
     F532: [
-      <div className="flex justify-center gap-16"><Slot index={9} label="CF" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={10} label="CF" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-around"><Slot index={6} label="CM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="CM" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="CM" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-around pt-10"><Slot index={1} label="LD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="SW" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={4} label="CD" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={5} label="RD" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
-    ],
-    F523: [
-      <div className="flex justify-around"><Slot index={10} label="LW" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={9} label="ST" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="RW" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-center gap-20"><Slot index={6} label="CM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="CM" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-around pt-10"><Slot index={1} label="LD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="SW" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={4} label="CD" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={5} label="RD" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
+      <div key="fw" className="flex justify-center gap-16"><Slot index={9} label="CF" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={10} label="CF" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="mf" className="flex justify-around"><Slot index={6} label="CM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="CM" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="CM" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="df" className="flex justify-around pt-10"><Slot index={1} label="LD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="SW" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={4} label="CD" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={5} label="RD" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
     ],
     F352: [
-      <div className="flex justify-center gap-16"><Slot index={9} label="CF" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={10} label="CF" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-around"><Slot index={4} label="LM" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={5} label="CM" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={6} label="DM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="CM" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="RM" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
-      <div className="flex justify-center gap-16 pt-10"><Slot index={1} label="CD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="CD" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
+      <div key="fw" className="flex justify-center gap-16"><Slot index={9} label="CF" value={lineup[9]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={10} label="CF" value={lineup[10]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="mf" className="flex justify-around"><Slot index={4} label="LM" value={lineup[4]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={5} label="CM" value={lineup[5]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={6} label="DM" value={lineup[6]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={7} label="CM" value={lineup[7]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={8} label="RM" value={lineup[8]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>,
+      <div key="df" className="flex justify-center gap-16 pt-10"><Slot index={1} label="CD" value={lineup[1]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={2} label="CD" value={lineup[2]} players={players} busyIds={busyIds} onSelect={onSelect} /><Slot index={3} label="CD" value={lineup[3]} players={players} busyIds={busyIds} onSelect={onSelect} /></div>
     ],
   };
 
+  const selectedLines = lines[f as string] || lines.F442;
+
   return (
     <>
-      {lines[f][0]}
-      {lines[f][1]}
-      {lines[f][2]}
+      {selectedLines[0]}
+      {selectedLines[1]}
+      {selectedLines[2]}
       <div className="flex justify-center pt-12">{GK}</div>
     </>
   );
@@ -368,7 +368,7 @@ function Slot({ index, label, value, players, busyIds, onSelect }: any) {
        <div className={`w-10 h-10 rounded-sm border flex items-center justify-center transition-all ${p ? 'bg-[#e30613] border-white scale-110 shadow-lg' : 'bg-[#000c2d]/50 border-white/10 text-white/20'}`}>
          {p ? <span className="text-[10px] font-black text-white italic">{p.power}</span> : <span className="text-[8px] font-black">{label}</span>}
        </div>
-       <select value={value || ""} onChange={(e) => onSelect(index, e.target.value, false)} className="w-20 bg-[#0a1829]/90 border border-white/10 rounded-sm text-[7px] font-black text-white p-1 outline-none text-center">
+       <select value={(value as string) || ""} onChange={(e) => onSelect(index, e.target.value, false)} className="w-20 bg-[#0a1829]/90 border border-white/10 rounded-sm text-[7px] font-black text-white p-1 outline-none text-center">
          <option value="">-- {label} --</option>
          {filteredPlayers.map((pl: any) => <option key={pl.id} value={pl.id}>[{pl.mainPosition}] {pl.lastName} ({pl.power})</option>)}
        </select>

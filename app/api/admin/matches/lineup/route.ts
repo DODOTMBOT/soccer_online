@@ -1,40 +1,31 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { 
-  DefenseSetup, 
+  DefenseType, 
   Position, 
-  Philosophy, 
+  VflStyle, 
   Formation, 
   Mentality, 
   TeamSpirit 
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+// Импортируем наш единый справочник схем
+import { FORMATION_CONFIG } from "@/lib/rules/formations";
 
 /**
  * Определение позиции игрока на основе индекса слота и выбранной схемы.
- * Используется для записи в поле assignedPosition модели MatchLineupSlot.
+ * Теперь берет данные из центрального конфига lib/rules/formations.ts
  */
 function getAssignedPosition(index: number, formation: Formation): Position {
-  if (index === 0) return Position.GK;
+  const formationConfig = FORMATION_CONFIG[formation];
 
-  const maps: Record<Formation, Record<number, Position>> = {
-    F442: {
-      1: Position.LB, 2: Position.CB, 3: Position.CB, 4: Position.RB,
-      5: Position.LM, 6: Position.CM, 7: Position.CM, 8: Position.RM,
-      9: Position.ST, 10: Position.ST
-    },
-    F433: {
-      1: Position.LB, 2: Position.CB, 3: Position.CB, 4: Position.RB,
-      5: Position.CM, 6: Position.DM, 7: Position.CM, 
-      8: Position.RW, 9: Position.LW, 10: Position.ST
-    },
-    F424: { 1: Position.LB, 2: Position.CB, 3: Position.CB, 4: Position.RB, 5: Position.CM, 6: Position.CM, 7: Position.RW, 8: Position.CF, 9: Position.CF, 10: Position.LW },
-    F532: { 1: Position.LB, 2: Position.CB, 3: Position.SW, 4: Position.CB, 5: Position.RB, 6: Position.CM, 7: Position.CM, 8: Position.CM, 9: Position.CF, 10: Position.CF },
-    F523: { 1: Position.LB, 2: Position.CB, 3: Position.SW, 4: Position.CB, 5: Position.RB, 6: Position.CM, 7: Position.CM, 8: Position.RW, 9: Position.ST, 10: Position.LW },
-    F352: { 1: Position.CB, 2: Position.CB, 3: Position.CB, 4: Position.LM, 5: Position.CM, 6: Position.DM, 7: Position.CM, 8: Position.RM, 9: Position.CF, 10: Position.CF },
-  };
+  // Если конфиг для схемы найден и слот существует (индексы 0-10)
+  if (formationConfig && formationConfig[index]) {
+    return formationConfig[index].main;
+  }
 
-  return maps[formation]?.[index] || Position.CM;
+  // Для запасных (индексы 11+) или если что-то пошло не так — возвращаем нейтральную позицию
+  return Position.CM;
 }
 
 export async function POST(req: Request) {
@@ -52,58 +43,52 @@ export async function POST(req: Request) {
       spirit 
     } = body;
 
-    // 1. Валидация количества игроков
+    // 1. Валидация количества игроков основы
     if (!playerIds || playerIds.length !== 11) {
       return NextResponse.json({ error: "Нужно выбрать 11 игроков" }, { status: 400 });
     }
 
-    // 2. Поиск тактики в справочнике
-    const tacticRecord = await prisma.tactic.findUnique({
-      where: { philosophy: tactic as Philosophy }
-    });
-
-    if (!tacticRecord) {
-      return NextResponse.json({ 
-        error: "Тактика не найдена в справочнике. Проверьте таблицу Tactic." 
-      }, { status: 400 });
-    }
-
+    // Приводим к Enum или берем дефолты
     const selectedFormation = (formation as Formation) || Formation.F442;
+    const selectedTactic = (tactic as VflStyle) || VflStyle.NORMAL;
+    const selectedDefense = (defenseSetup as DefenseType) || DefenseType.ZONAL;
+    const selectedMentality = (mentality as Mentality) || Mentality.NORMAL;
+    const selectedSpirit = (spirit as TeamSpirit) || TeamSpirit.NORMAL;
 
-    // 3. Подготовка данных для слотов состава
+    // 2. Подготовка данных для слотов состава
     const allSlotsData = [
+      // Основной состав (индексы 0-10)
       ...playerIds.map((id: string, index: number) => ({
         playerId: id,
         slotIndex: index,
+        // Динамически определяем позицию из конфига
         assignedPosition: getAssignedPosition(index, selectedFormation)
       })),
+      // Запасные (индексы 11+)
       ...(subIds || []).map((id: string, index: number) => ({
         playerId: id,
         slotIndex: index + 11,
+        // Запасным ставим дефолтную позицию, она не влияет на расчет матча пока игрок не выйдет
         assignedPosition: Position.CM 
       }))
     ].filter(slot => slot.playerId);
 
-    // 4. Выполнение транзакции сохранения
+    // 3. Выполнение транзакции сохранения
     await prisma.$transaction(async (tx) => {
+      // Ищем существующую настройку для этого матча и команды
       const existingSetup = await tx.matchTeamSetup.findUnique({
         where: { matchId_teamId: { matchId, teamId } }
       });
 
-      /**
-       * Основные тактические данные. 
-       * Мы используем tacticRef для связи, поэтому tacticId исключаем из объекта, 
-       * чтобы избежать конфликта типов в Prisma.
-       */
       const tacticalData = {
-        tactic: tactic as Philosophy,
-        defenseSetup: (defenseSetup as DefenseSetup) || DefenseSetup.ZONAL,
+        tactic: selectedTactic,
+        defenseSetup: selectedDefense,
         formation: selectedFormation,
-        mentality: (mentality as Mentality) || Mentality.BALANCED,
-        spirit: (spirit as TeamSpirit) || TeamSpirit.NORMAL,
+        mentality: selectedMentality,
+        spirit: selectedSpirit,
         isSubmitted: true,
         submittedAt: new Date(),
-        tacticRef: { connect: { id: tacticRecord.id } }, 
+        // Пересоздаем слоты
         lineupSlots: {
           create: allSlotsData
         }
@@ -138,7 +123,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("LINEUP_SAVE_ERROR:", error);
     return NextResponse.json({ 
-      error: "Ошибка сервера", 
+      error: "Ошибка сервера при сохранении состава", 
       details: error.message 
     }, { status: 500 });
   }

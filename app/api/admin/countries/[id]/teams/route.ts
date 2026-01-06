@@ -1,55 +1,40 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
 
 export async function GET(
   request: Request,
-  props: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> } // Типизируем как Promise для Next.js 15
 ) {
   try {
-    const params = await props.params;
-    const countryId = params.id;
-
-    if (!countryId) {
-      return NextResponse.json({ error: "Некорректный ID страны" }, { status: 400 });
-    }
+    // Ожидаем параметры
+    const { id } = await params;
 
     const teams = await prisma.team.findMany({
-      where: {
-        countryId: countryId,
-      },
+      where: { countryId: id },
       include: {
+        league: true, // ВАЖНО: тянем данные о лиге
         manager: {
           select: {
             id: true,
             login: true,
             name: true,
           }
-        },
-        league: {
-          select: {
-            name: true,
-            level: true
-          }
         }
       },
-      orderBy: {
-        name: 'asc',
-      },
+      orderBy: { name: 'asc' }
     });
 
-    // Исправление ошибки BigInt (превращаем числа в строки)
-    const serializedTeams = teams.map((team) => ({
-      ...team,
-      finances: team.finances.toString(),
-    }));
+    const serialize = (obj: any): any => {
+      return JSON.parse(
+        JSON.stringify(obj, (key, value) =>
+          typeof value === "bigint" ? value.toString() : value
+        )
+      );
+    };
 
-    return NextResponse.json(serializedTeams);
-
+    return NextResponse.json(serialize(teams));
   } catch (error: any) {
-    console.error("🔥 SERVER ERROR:", error);
-    return NextResponse.json(
-      { error: "Ошибка сервера", details: error.message }, 
-      { status: 500 }
-    );
+    console.error("Teams API Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

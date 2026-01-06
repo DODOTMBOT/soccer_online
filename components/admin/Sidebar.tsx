@@ -10,14 +10,10 @@ import {
   Plus, 
   Search, 
   Bell, 
-  ChevronDown,
-  UserPlus,
-  Globe,
-  Layers,
   LogOut,
   Coins,
   Briefcase,
-  FileText
+  Settings // Заменим на Settings для иконки админки
 } from "lucide-react";
 
 // Основное меню навигации
@@ -25,38 +21,21 @@ const MENU_ITEMS = [
   { name: "Главная", href: "/", icon: ShieldCheck },
   { name: "Клубы", href: "/teams", icon: Activity },
   { name: "Правила", href: "/rules", icon: Activity },
-
-  // Добавим быстрый доступ к бирже, чтобы можно было смотреть вакансии
   { name: "Свободные команды", href: "/teams/free", icon: Briefcase },
 ];
 
-// Меню "Создать" (только для Админа)
-const CREATE_ITEMS = [
-  { name: "Игрок", href: "/admin/players/new", icon: UserPlus },
-  { name: "Клуб", href: "/admin/teams/new", icon: ShieldCheck },
-  { name: "Страна", href: "/admin/countries/new", icon: Globe },
-  { name: "Лига", href: "/admin/leagues/new", icon: Layers },
-  // Новый пункт для управления заявками
-  { name: "Заявки", href: "/admin/applications", icon: FileText },
-];
-
 export function Sidebar() {
-  const { data: session } = useSession(); // Сессия обновляется из БД благодаря правке в lib/auth.ts
+  const { data: session } = useSession();
   const pathname = usePathname();
   
-  // Состояния для выпадающих меню
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  // Оставляем только меню пользователя
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Данные пользователя
   const teamId = session?.user?.teamId;
   const userRole = session?.user?.role;
   const userBalance = session?.user?.balance;
 
-  // Форматирование денег (1000000 -> 1.0M)
   const formatBalance = (val: string | undefined) => {
     if (!val) return "0";
     const num = Number(val);
@@ -64,12 +43,8 @@ export function Sidebar() {
     return num.toLocaleString();
   };
 
-  // Закрытие меню при клике вне элемента
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsCreateOpen(false);
-      }
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
       }
@@ -78,9 +53,7 @@ export function Sidebar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Закрытие меню при переходе на другую страницу
   useEffect(() => {
-    setIsCreateOpen(false);
     setIsUserMenuOpen(false);
   }, [pathname]);
 
@@ -96,7 +69,6 @@ export function Sidebar() {
         </Link>
 
         <nav className="flex gap-2 items-center">
-          {/* Рендеринг основных пунктов меню */}
           {MENU_ITEMS.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -112,15 +84,13 @@ export function Sidebar() {
             );
           })}
 
-          {/* --- ДИНАМИЧЕСКАЯ КНОПКА СТАТУСА КОМАНДЫ --- */}
           {session?.user && (
             <Link
-              // Если есть команда -> идем в управление командой. Если нет -> на биржу труда
               href={teamId ? `/admin/teams/${teamId}` : "/teams/free"}
               className={`px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${
                 teamId 
-                  ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-600/20" // Зеленая (Есть команда)
-                  : "bg-amber-600/10 text-amber-400 border-amber-500/30 hover:bg-amber-600/20" // Желтая (Нет команды)
+                  ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-600/20" 
+                  : "bg-amber-600/10 text-amber-400 border-amber-500/30 hover:bg-amber-600/20"
               }`}
             >
               <div className={`w-1.5 h-1.5 rounded-full ${teamId ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
@@ -128,46 +98,25 @@ export function Sidebar() {
             </Link>
           )}
 
-          {/* --- ВЫПАДАЮЩЕЕ МЕНЮ АДМИНА --- */}
+          {/* --- ПРЯМАЯ ССЫЛКА В АДМИНКУ --- */}
           {userRole === "ADMIN" && (
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setIsCreateOpen(!isCreateOpen)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                  isCreateOpen ? "bg-white/20 text-white" : "text-gray-300 hover:text-white hover:bg-white/10"
-                }`}
-              >
-                <Plus size={14} className="text-[#e30613]" />
-                Админ
-                <ChevronDown size={12} className={`transition-transform duration-200 ${isCreateOpen ? "rotate-180" : ""}`} />
-              </button>
-
-              {isCreateOpen && (
-                <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-sm shadow-2xl border border-gray-200 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="px-4 py-1 mb-1 border-b border-gray-100">
-                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Панель управления</p>
-                  </div>
-                  {CREATE_ITEMS.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold uppercase text-[#000c2d] hover:bg-gray-100 transition-colors"
-                    >
-                      <item.icon size={14} className="text-gray-400" />
-                      {item.name}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
+            <Link
+              href="/admin"
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                pathname.startsWith("/admin") && pathname !== `/admin/teams/${teamId}` 
+                  ? "bg-white/20 text-white" 
+                  : "text-gray-300 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Settings size={14} className="text-[#e30613]" />
+              Админ-панель
+            </Link>
           )}
         </nav>
       </div>
 
       {/* ПРАВАЯ ЧАСТЬ: БАЛАНС И ПРОФИЛЬ */}
       <div className="flex items-center gap-6">
-        
-        {/* Баланс */}
         {session?.user && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-sm hover:bg-white/10 transition-colors">
             <Coins size={14} className="text-yellow-500" />
@@ -177,13 +126,11 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Уведомления */}
         <div className="flex items-center gap-4 border-r border-white/10 pr-6">
           <Search size={18} className="text-gray-400 cursor-pointer hover:text-white transition-colors" />
           <Bell size={18} className="text-gray-400 cursor-pointer hover:text-white transition-colors" />
         </div>
 
-        {/* Меню профиля */}
         <div className="relative" ref={userMenuRef}>
           <div 
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -202,7 +149,6 @@ export function Sidebar() {
             </div>
           </div>
 
-          {/* Выпадающее меню профиля */}
           {isUserMenuOpen && session && (
             <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-sm shadow-2xl border border-gray-200 py-2 animate-in fade-in slide-in-from-top-2 text-[#000c2d]">
               <div className="px-4 py-2 border-b border-gray-100 mb-1">
