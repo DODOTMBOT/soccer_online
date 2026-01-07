@@ -3,10 +3,6 @@
 import { useEffect, useState } from "react";
 import { Check, X, User, Shield } from "lucide-react";
 import toast from "react-hot-toast";
-import { prisma } from "@/src/server/db"; // Нельзя использовать prisma на клиенте!
-// Нам нужен API для получения заявок. Давай сделаем fetch прямо в компоненте через серверный экшен или просто новый API.
-// Для простоты сделаем новый GET роут или используем useEffect с API.
-// Создадим быстрый API для GET заявок ниже.
 
 export default function AdminApplicationsPage() {
   const [apps, setApps] = useState<any[]>([]);
@@ -14,10 +10,13 @@ export default function AdminApplicationsPage() {
 
   const fetchApps = async () => {
     try {
-      const res = await fetch("/api/admin/applications/list"); // Создадим этот роут ниже
-      if (res.ok) setApps(await res.json());
+      const res = await fetch("/api/admin/applications");
+      if (res.ok) {
+        setApps(await res.json());
+      }
     } catch (e) {
       console.error(e);
+      toast.error("Не удалось загрузить заявки");
     } finally {
       setLoading(false);
     }
@@ -30,14 +29,19 @@ export default function AdminApplicationsPage() {
   const handleResolve = async (appId: string, decision: 'APPROVE' | 'REJECT') => {
     const toastId = toast.loading("Обработка...");
     try {
-      const res = await fetch("/api/applications/resolve", {
-        method: "POST",
-        body: JSON.stringify({ applicationId: appId, decision })
+      // Используем новый REST endpoint с методом PATCH
+      const res = await fetch("/api/admin/applications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          id: appId, 
+          status: decision === 'APPROVE' ? 'APPROVED' : 'REJECTED' 
+        })
       });
       
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error);
+        throw new Error(err.error || "Ошибка обработки");
       }
 
       toast.success(decision === 'APPROVE' ? "Одобрено" : "Отклонено", { id: toastId });
