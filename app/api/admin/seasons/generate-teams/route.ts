@@ -1,13 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { REAL_CLUBS_DB } from "@/lib/data/real-clubs";
+import { REAL_PLAYERS_DB } from "@/lib/data/real-players"; // База реальных игроков
+import { FORM_CURVE } from "@/lib/rules/fitness"; // Синусоида формы
 import { Position, VflStyle } from "@prisma/client";
 
-// --- Вспомогательные функции (НУЖНЫ ДЛЯ РАБОТЫ) ---
+// --- Функция генерации ботов (если клуба нет в REAL_PLAYERS_DB) ---
 
-function generateRandomPlayer(countryId: string, pos: Position) {
-  const SURNAMES = ["Smith", "Jones", "Taylor", "Brown", "Wilson", "Evans", "Thomas", "Johnson", "Roberts", "Walker", "Wright", "Robinson", "Thompson", "White", "Hughes", "Edwards", "Green", "Hall", "Wood", "Harris", "Garcia", "Martinez", "Rodriguez", "Lopez", "Hernandez", "Gonzalez", "Perez", "Sanchez", "Ramirez", "Torres"];
-  const NAMES = ["James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph", "Thomas", "Charles", "Christopher", "Daniel", "Matthew", "Anthony", "Donald", "Mark", "Paul", "Steven", "Andrew", "Kenneth", "George", "Joshua", "Kevin", "Brian", "Edward"];
+function generateRandomBot(countryId: string, pos: Position) {
+  const SURNAMES = ["Smith", "Jones", "Taylor", "Brown", "Wilson", "Evans", "Thomas", "Johnson", "Roberts", "Walker", "Wright", "Robinson", "Thompson", "White", "Hughes", "Edwards", "Green", "Hall", "Wood", "Harris"];
+  const NAMES = ["James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph", "Thomas", "Charles", "Christopher", "Daniel", "Matthew", "Anthony", "Mark", "Paul", "Steven", "Kenneth", "George", "Joshua"];
 
   const styles = Object.values(VflStyle);
   const randomStyle = styles[Math.floor(Math.random() * styles.length)];
@@ -17,11 +19,15 @@ function generateRandomPlayer(countryId: string, pos: Position) {
     lastName: SURNAMES[Math.floor(Math.random() * SURNAMES.length)],
     age: Math.floor(Math.random() * (34 - 17 + 1)) + 17,
     mainPosition: pos,
-    power: Math.floor(Math.random() * (80 - 50 + 1)) + 50,
+    power: Math.floor(Math.random() * (75 - 55 + 1)) + 55,
     favoriteStyle: randomStyle,
     styleKnowledge: Math.floor(Math.random() * 100),
     countryId: countryId,
-    specSpeed: 0, specHeading: 0, specLongPass: 0, specShortPass: 0, specDribbling: 0, specCombination: 0, specTackling: 0, specMarking: 0, specShooting: 0, specFreeKicks: 0, specCorners: 0, specPenalty: 0, specCaptain: 0, specLeader: 0, specAthleticism: 0, specSimulation: 0, specGkReflexes: 0, specGkOut: 0
+    // Пришиваем форму
+    formIndex: Math.floor(Math.random() * FORM_CURVE.length),
+    fitness: 100,
+    fatigue: 0,
+    currentForm: 100,
   };
 }
 
@@ -56,6 +62,7 @@ export async function POST(req: Request) {
 
       if (allRealClubs.length === 0) continue;
 
+      // Создаем/проверяем лиги
       const teamsPerLeague = 16;
       const neededLeaguesCount = Math.ceil(allRealClubs.length / teamsPerLeague);
       const leagueIds: string[] = [];
@@ -71,6 +78,7 @@ export async function POST(req: Request) {
         leagueIds.push(league.id);
       }
 
+      // Собираем уже распределенные команды
       const assignedTeams = await prisma.team.findMany({
         where: { leagueId: { in: leagueIds } },
         select: { name: true }
@@ -100,8 +108,36 @@ export async function POST(req: Request) {
           });
           totalAssigned++;
         } else {
-          // Здесь ошибки "Cannot find name" исчезнут, так как функции определены выше
-          const playersData = BASE_ROSTER.map((pos: Position) => generateRandomPlayer(country.id, pos));
+          // --- ЛОГИКА СОЗДАНИЯ ИГРОКОВ (РЕАЛЬНЫЕ ИЛИ БОТЫ) ---
+          const realPlayersData = REAL_PLAYERS_DB[clubDef.name];
+          let finalPlayersPayload = [];
+
+          if (realPlayersData && realPlayersData.length > 0) {
+            // Загружаем реальных звезд
+            for (const p of realPlayersData) {
+              // Ищем страну игрока для получения флага (по названию из nationality)
+              const playerCountry = await prisma.country.findFirst({
+                where: { name: { contains: p.nationality, mode: 'insensitive' } }
+              });
+
+              finalPlayersPayload.push({
+                firstName: p.firstName,
+                lastName: p.lastName,
+                age: p.age,
+                mainPosition: p.mainPosition,
+                power: p.power,
+                countryId: playerCountry?.id || country.id,
+                formIndex: Math.floor(Math.random() * FORM_CURVE.length),
+                fitness: 100,
+                fatigue: 0,
+                currentForm: 100
+              });
+            }
+          } else {
+            // Если клуба нет в базе игроков — генерируем стандартный ростер ботов
+            finalPlayersPayload = BASE_ROSTER.map(pos => generateRandomBot(country.id, pos));
+          }
+
           await prisma.team.create({
             data: {
               name: clubDef.name,
@@ -111,8 +147,8 @@ export async function POST(req: Request) {
               finances: BigInt(10000000),
               countryId: country.id,
               leagueId: targetLeagueId,
-              power: Math.floor(Math.random() * 30) + 50,
-              players: { create: playersData }
+              power: 0, // Сила пересчитается движком
+              players: { create: finalPlayersPayload }
             }
           });
           totalCreated++;
@@ -122,7 +158,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      message: `Готово. Создано: ${totalCreated}, распределено: ${totalAssigned}` 
+      message: `Готово. Создано клубов: ${totalCreated}, распределено: ${totalAssigned}` 
     });
 
   } catch (error: any) {

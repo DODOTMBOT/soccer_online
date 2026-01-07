@@ -2,8 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { School, Position } from "@prisma/client";
-// Импортируем логику расчета цены
+import { Position } from "@prisma/client";
 import { getPriceFromPlayerObject } from "@/lib/economy";
 
 export async function POST(req: Request) {
@@ -16,28 +15,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { 
       firstName, lastName, age, mainPosition, sidePosition, power, 
-      teamId, countryId, school, potential, injuryProne, fatigue,
-      specKr, specKt, specRv, specVp, specIbm, specKp, specSt, specZv, 
-      specL, specKi, specPhys, specLong, specInt, specAnt, specSpd, specGkRea, specGkPos
+      teamId, countryId, formIndex
     } = body;
 
     if (!firstName || !lastName || !teamId || !countryId || !mainPosition) {
       return NextResponse.json({ error: "Недостаточно данных" }, { status: 400 });
     }
 
-    // 1. Автоматический расчет цены на основе пришедших данных
     const calculatedPrice = getPriceFromPlayerObject(body);
-
-    // Маппинг школы из UI в Enum Prisma
-    const schoolMapping: Record<string, School> = {
-      "Сила": School.POWER,
-      "Техника": School.THOUGHT,
-      "Мысль": School.THOUGHT,
-      "POWER": School.POWER,
-      "THOUGHT": School.THOUGHT
-    };
-
-    const finalSchool = schoolMapping[school] || School.POWER;
 
     const newPlayer = await prisma.player.create({
       data: {
@@ -47,40 +32,37 @@ export async function POST(req: Request) {
         mainPosition: mainPosition as Position,
         sidePosition: (sidePosition as Position) || null,
         power: Number(power),
-        school: finalSchool,
-        potential: Number(potential) || 0,
-        injuryProne: Number(injuryProne) || 0,
-        fatigue: Number(fatigue) || 0,
-        
-        // 2. Устанавливаем рассчитанную цену (Prisma вернет это поле как BigInt)
         price: calculatedPrice, 
+        fatigue: 0,
+        fitness: 100,
+        currentForm: 100,
+        formIndex: Number(formIndex) || 0,
 
         team: { connect: { id: teamId } },
         country: { connect: { id: countryId } },
         
-        // Спецухи
-        specKr: Number(specKr) || 0,
-        specKt: Number(specKt) || 0,
-        specRv: Number(specRv) || 0,
-        specVp: Number(specVp) || 0,
-        specIbm: Number(specIbm) || 0,
-        specKp: Number(specKp) || 0,
-        specSt: Number(specSt) || 0,
-        specZv: Number(specZv) || 0,
-        specL: Number(specL) || 0,
-        specKi: Number(specKi) || 0,
-        specPhys: Number(specPhys) || 0,
-        specLong: Number(specLong) || 0,
-        specInt: Number(specInt) || 0,
-        specAnt: Number(specAnt) || 0,
-        specSpd: Number(specSpd) || 0,
-        specGkRea: Number(specGkRea) || 0,
-        specGkPos: Number(specGkPos) || 0,
+        // Маппинг специализаций под твою схему
+        specSpeed: Number(body.specSpd) || 0,
+        specHeading: Number(body.specHeading) || 0,
+        specLongPass: Number(body.specLong) || 0,
+        specShortPass: Number(body.specShortPass) || 0,
+        specDribbling: Number(body.specKt) || 0,
+        specCombination: Number(body.specCombination) || 0,
+        specTackling: Number(body.specTackling) || 0,
+        specMarking: Number(body.specMarking) || 0,
+        specShooting: Number(body.specZv) || 0,
+        specFreeKicks: Number(body.specSt) || 0,
+        specCorners: Number(body.specCorners) || 0,
+        specPenalty: Number(body.specPenalty) || 0,
+        specCaptain: Number(body.specL) || 0,
+        specLeader: Number(body.specKi) || 0,
+        specAthleticism: Number(body.specPhys) || 0,
+        specSimulation: Number(body.specSimulation) || 0,
+        specGkReflexes: Number(body.specGkRea) || 0,
+        specGkOut: Number(body.specGkPos) || 0,
       },
     });
 
-    // 👇 ИСПРАВЛЕНИЕ ЗДЕСЬ
-    // Мы вручную сериализуем объект, превращая BigInt (например, price) в строку
     const serializedPlayer = JSON.parse(
       JSON.stringify(newPlayer, (key, value) =>
         typeof value === 'bigint' ? value.toString() : value

@@ -1,89 +1,62 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { Position } from "@prisma/client";
-
-/**
- * Карта исправления позиций. 
- * Используются только значения, существующие в enum Position схемы Prisma.
- */
-const POSITION_MAP: Record<string, Position> = {
-  "LD": Position.LD,
-  "RD": Position.RD,
-  "CD": Position.CD, // В схеме используется CD вместо CB
-  "ST": Position.ST,
-  "LW": Position.LF, // Маппинг на доступные в схеме позиции Forward
-  "RW": Position.RF,
-  "FR": Position.FR, // Free Role доступен в схеме
-};
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const playersData = Array.isArray(body) ? body : body.players;
+    const playersData = await req.json();
 
-    if (!playersData || playersData.length === 0) {
-      return NextResponse.json({ error: "Нет данных для сохранения" }, { status: 400 });
+    if (!Array.isArray(playersData)) {
+      return NextResponse.json({ error: "Ожидался массив данных" }, { status: 400 });
     }
 
     const created = await prisma.player.createMany({
-      data: playersData.map((p: any) => {
-        // Проверяем позицию по карте или оставляем как есть
-        const finalMainPos = POSITION_MAP[p.mainPosition] || p.mainPosition;
-        const finalSidePos = p.sidePosition ? (POSITION_MAP[p.sidePosition] || p.sidePosition) : null;
+      data: playersData.map((p: any) => ({
+        firstName: p.firstName,
+        lastName: p.lastName,
+        age: parseInt(p.age),
+        mainPosition: p.mainPosition,
+        sidePosition: p.sidePosition || null,
+        teamId: p.teamId,
+        countryId: p.countryId,
+        power: parseInt(p.power),
+        
+        // Поля физ. формы
+        formIndex: p.formIndex !== undefined ? parseInt(p.formIndex) : 0,
+        fatigue: 0,
+        fitness: 100,
+        currentForm: 100,
+        // formIndex_history УДАЛЕНО, так как его нет в схеме
 
-        return {
-          firstName: p.firstName,
-          lastName: p.lastName,
-          age: Number(p.age) || 18,
-          
-          mainPosition: finalMainPos as Position, 
-          sidePosition: finalSidePos as Position,
-          
-          teamId: p.teamId,
-          countryId: p.countryId,
-          
-          power: Number(p.power) || 40,
-          // Убрано поле school, так как оно отсутствует в текущей схеме Player
-          
-          price: p.price ? BigInt(p.price) : BigInt(0),
-          potential: Number(p.potential) || 0,
-          injuryProne: Number(p.injuryProne) || 0,
-          fatigue: Number(p.fatigue) || 0,
-
-          // Соответствие полей специализаций актуальной схеме
-          specSpeed: Number(p.specSpeed) || Number(p.specSpd) || 0,
-          specHeading: Number(p.specHeading) || 0,
-          specLongPass: Number(p.specLongPass) || 0,
-          specShortPass: Number(p.specShortPass) || Number(p.specKp) || 0,
-          specDribbling: Number(p.specDribbling) || 0,
-          specCombination: Number(p.specCombination) || 0,
-          specTackling: Number(p.specTackling) || 0,
-          specMarking: Number(p.specMarking) || 0,
-          specShooting: Number(p.specShooting) || 0,
-          specFreeKicks: Number(p.specFreeKicks) || Number(p.specSt) || 0,
-          specCorners: Number(p.specCorners) || 0,
-          specPenalty: Number(p.specPenalty) || 0,
-          specCaptain: Number(p.specCaptain) || 0,
-          specLeader: Number(p.specLeader) || Number(p.specL) || 0,
-          specAthleticism: Number(p.specAthleticism) || Number(p.specPhys) || 0,
-          specSimulation: Number(p.specSimulation) || 0,
-          specGkReflexes: Number(p.specGkReflexes) || Number(p.specGkRea) || 0,
-          specGkOut: Number(p.specGkOut) || 0,
-        };
-      }),
+        // Специализации (маппинг ключей формы на поля БД)
+        specSpeed: parseInt(p.specSpd || 0),
+        specHeading: parseInt(p.specHeading || 0),
+        specLongPass: parseInt(p.specLong || 0),
+        specShortPass: parseInt(p.specShortPass || 0),
+        specDribbling: parseInt(p.specKt || 0), 
+        specCombination: parseInt(p.specCombination || 0),
+        specTackling: parseInt(p.specTackling || 0),
+        specMarking: parseInt(p.specMarking || 0),
+        specShooting: parseInt(p.specZv || 0),
+        specFreeKicks: parseInt(p.specSt || 0),
+        specCorners: parseInt(p.specCorners || 0),
+        specPenalty: parseInt(p.specPenalty || 0),
+        specCaptain: parseInt(p.specL || 0),
+        specLeader: parseInt(p.specKi || 0),
+        specAthleticism: parseInt(p.specPhys || 0),
+        specSimulation: parseInt(p.specSimulation || 0),
+        specGkReflexes: parseInt(p.specGkRea || 0),
+        specGkOut: parseInt(p.specGkPos || 0),
+      })),
       skipDuplicates: true,
     });
 
     return NextResponse.json({ 
       success: true, 
       count: created.count 
-    }, { status: 201 });
+    });
 
   } catch (error: any) {
     console.error("BULK_CREATE_ERROR:", error);
-    return NextResponse.json({ 
-      error: "Ошибка создания игроков. Проверьте соответствие Enum позиций и имен полей.", 
-      details: error.message 
-    }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

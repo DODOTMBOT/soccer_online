@@ -4,6 +4,7 @@ import { useState } from "react";
 import { 
   Loader2, Zap, Trash2, Plus, Globe, Shield, Database, Activity, Star, Brain, Dumbbell, Dices
 } from "lucide-react";
+import { FITNESS_RULES, FORM_CURVE } from "@/lib/rules/fitness"; // Импорт правил
 
 interface Team { id: string; name: string; }
 interface Country { id: string; name: string; }
@@ -62,6 +63,7 @@ export default function PlayerForm({
     mainPosition: positions[0] || "CD", sidePosition: "",
     power: "40", school: schools[0] || "POWER",
     potential: "0", injuryProne: "0",
+    formIndex: 0, // Изначальный индекс
     specKr: "0", specKt: "0", specRv: "0", specVp: "0", specIbm: "0", specKp: "0",
     specZv: "0", specSt: "0", specL: "0", specKi: "0", specPhys: "0", specLong: "0",
     specInt: "0", specAnt: "0", specSpd: "0", specGkRea: "0", specGkPos: "0"
@@ -71,18 +73,19 @@ export default function PlayerForm({
     ...initialPlayerState,
     tempId: Math.random().toString(36).substr(2, 9),
     potential: generateWeightedValue('potential').toString(),
-    injuryProne: generateWeightedValue('injury').toString()
+    injuryProne: generateWeightedValue('injury').toString(),
+    // РАНДОМНЫЙ СТАРТ ПО СИНУСОИДЕ (от 0 до 11)
+    formIndex: Math.floor(Math.random() * FORM_CURVE.length)
   });
 
   const [singleForm, setSingleForm] = useState({ ...createNewPlayer(), tempId: "single" });
   const [bulkPlayers, setBulkPlayers] = useState([createNewPlayer()]);
 
-  // --- ЛОГИКА ЛИМИТА 16 ---
   const getTotalSpecs = (player: any) => {
     return ALL_SPEC_KEYS.reduce((sum, key) => sum + parseInt(player[key] || "0"), 0);
   };
 
-  const updateBulkPlayer = (index: number, field: string, value: string) => {
+  const updateBulkPlayer = (index: number, field: string, value: any) => {
     setBulkPlayers(prev => {
       const newArr = [...prev];
       newArr[index] = { ...newArr[index], [field]: value };
@@ -90,8 +93,15 @@ export default function PlayerForm({
     });
   };
 
-  const updateSinglePlayer = (field: string, value: string) => {
+  const updateSinglePlayer = (field: string, value: any) => {
     setSingleForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Регенерация формы (отдельная кнопка если нужно)
+  const regenerateForm = (isTable: boolean, index: number) => {
+    const newIdx = Math.floor(Math.random() * FORM_CURVE.length);
+    if (isTable) updateBulkPlayer(index, 'formIndex', newIdx);
+    else updateSinglePlayer('formIndex', newIdx);
   };
 
   const regenerateStat = (isTable: boolean, index: number, field: 'potential' | 'injury') => {
@@ -119,6 +129,7 @@ export default function PlayerForm({
             power: parseInt(p.power),
             potential: parseInt(p.potential),
             injuryProne: parseInt(p.injuryProne),
+            formIndex: p.formIndex, // Отправляем индекс в БД
             sidePosition: p.sidePosition || null
         };
         ALL_SPEC_KEYS.forEach(key => data[key] = parseInt(p[key]));
@@ -206,11 +217,19 @@ export default function PlayerForm({
            </div>
 
            {!isBulk && (
-             <div className="flex flex-col items-end">
-                <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Слоты специализаций</span>
-                <span className={`text-xl font-black italic ${getTotalSpecs(singleForm) >= 16 ? 'text-red-600' : 'text-[#1a3151]'}`}>
-                  {getTotalSpecs(singleForm)} / 16
-                </span>
+             <div className="flex gap-10 items-center">
+                <div className="flex flex-col items-end">
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Начальная форма</span>
+                    <span className={`text-xl font-black italic text-emerald-600`}>
+                      {FITNESS_RULES.getFormPercentage(singleForm.formIndex)}%
+                    </span>
+                </div>
+                <div className="flex flex-col items-end">
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Слоты специализаций</span>
+                    <span className={`text-xl font-black italic ${getTotalSpecs(singleForm) >= 16 ? 'text-red-600' : 'text-[#1a3151]'}`}>
+                      {getTotalSpecs(singleForm)} / 16
+                    </span>
+                </div>
              </div>
            )}
         </div>
@@ -264,6 +283,21 @@ export default function PlayerForm({
                     </div>
                 </div>
              </div>
+             
+             {/* ДОБАВЛЕННЫЙ БЛОК ФИЗ. ФОРМЫ В ОДИНОЧНОЙ ФОРМЕ */}
+             <div className="bg-[#f0f9ff] border border-blue-100 p-4 rounded-sm flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                    <Activity className="text-blue-600" size={20}/>
+                    <div>
+                        <p className="text-[10px] font-black uppercase text-blue-900">Начальная физическая форма</p>
+                        <p className="text-[9px] text-blue-500 font-bold uppercase tracking-tight">Влияет на Реальную Силу (RS) в первом туре</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-4">
+                    <span className="text-2xl font-black text-blue-700 italic">{FITNESS_RULES.getFormPercentage(singleForm.formIndex)}%</span>
+                    <button type="button" onClick={() => regenerateForm(false, 0)} className="p-2 bg-blue-600 text-white rounded-sm hover:bg-[#e30613] transition-colors shadow-lg shadow-blue-200"><Dices size={16} /></button>
+                </div>
+             </div>
 
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="bg-gray-50 p-4 border border-gray-200">
@@ -296,6 +330,7 @@ export default function PlayerForm({
                     <th className="p-3 w-10">№</th>
                     <th className="p-3 w-48">Фамилия Имя</th>
                     <th className="p-3 text-center w-14">RS</th>
+                    <th className="p-3 text-center w-14">ФИЗ</th> {/* Столбец для физ формы */}
                     <th className="p-3 text-center w-20">СЛОТЫ</th>
                     <th className="p-3 text-center w-24">ТР / ПОТ</th>
                     {Object.values(SPEC_GROUPS).flat().map(s => (
@@ -315,6 +350,15 @@ export default function PlayerForm({
                         </div>
                       </td>
                       <td className="p-2"><input type="number" className="w-full text-center font-black text-[10px] text-[#e30613] bg-transparent outline-none" value={p.power} onChange={e => updateBulkPlayer(idx, "power", e.target.value)} /></td>
+                      
+                      {/* ОТОБРАЖЕНИЕ ФОРМЫ В ТАБЛИЦЕ */}
+                      <td className="p-2 text-center">
+                         <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-blue-600">{FITNESS_RULES.getFormPercentage(p.formIndex)}%</span>
+                            <button type="button" onClick={() => regenerateForm(true, idx)} className="text-gray-300 hover:text-blue-600"><Dices size={10}/></button>
+                         </div>
+                      </td>
+
                       <td className={`p-2 text-center font-black text-[10px] italic ${getTotalSpecs(p) >= 16 ? 'text-red-600' : 'text-gray-400'}`}>
                         {getTotalSpecs(p)} / 16
                       </td>
@@ -346,7 +390,7 @@ export default function PlayerForm({
         <div className="bg-emerald-50 border border-emerald-200 p-4 flex items-center gap-3 rounded-sm">
           <Activity size={16} className="text-emerald-600" />
           <p className="text-[10px] text-emerald-800 font-bold uppercase italic tracking-tight">
-             Система автоматически проверяет суммарный лимит специализаций (макс. 16) для каждого игрока.
+             Система автоматически проверяет суммарный лимит специализаций (макс. 16) и назначает стартовую физ. форму игрока.
           </p>
         </div>
 
