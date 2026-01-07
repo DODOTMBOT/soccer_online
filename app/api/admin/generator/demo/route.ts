@@ -1,6 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { NextResponse } from "next/server";
-import { playMatch, EngineTeam, EnginePlayer } from "@/src/services/engine/core";
+import { playMatch, EngineTeam, EnginePlayer } from "@/src/server/domain/engine/core";
 import { Prisma } from "@prisma/client";
 
 // Временный маппер для демо (упрощенный, так как у нас нет MatchTeamSetup)

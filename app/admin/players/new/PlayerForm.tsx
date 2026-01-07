@@ -4,7 +4,7 @@ import { useState } from "react";
 import { 
   Loader2, Zap, Trash2, Plus, Globe, Shield, Database, Activity, Star, Brain, Dumbbell, Dices
 } from "lucide-react";
-import { FITNESS_RULES, FORM_CURVE } from "@/lib/rules/fitness"; // Импорт правил
+import { FITNESS_RULES, FORM_CURVE } from "@/src/server/domain/rules/fitness"; // Импорт правил
 
 interface Team { id: string; name: string; }
 interface Country { id: string; name: string; }

@@ -1,6 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { NextResponse } from "next/server";
-import { MatchService } from "@/src/services/match-service"; // Подключаем наш сервис
+import { MatchService } from "@/src/server/services/match.service"; // Подключаем наш сервис
 import { revalidatePath } from "next/cache";
 
 export async function POST(req: Request) {

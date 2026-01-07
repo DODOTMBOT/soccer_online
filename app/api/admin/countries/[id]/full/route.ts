@@ -1,11 +1,12 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { NextResponse } from "next/server";
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // Исправлено: Promise
 ) {
   try {
+    // В Next.js 15 params нужно обязательно "дождаться" (await)
     const { id } = await params;
 
     const countryData = await prisma.country.findUnique({
@@ -25,7 +26,6 @@ export async function GET(
     }
 
     // Рекурсивная функция для превращения всех BigInt в String
-    // Это ВАЖНО, иначе Next.js вернет пустой объект или ошибку 500
     const serialize = (obj: any): any => {
       return JSON.parse(
         JSON.stringify(obj, (key, value) =>

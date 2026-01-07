@@ -1,5 +1,5 @@
 import React from 'react';
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { notFound } from "next/navigation";
 import { Sidebar } from "@/components/admin/Sidebar";
 import { ArrowLeft, Activity, Users, Clock, BarChart3, CalendarDays } from 'lucide-react';

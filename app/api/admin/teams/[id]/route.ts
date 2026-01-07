@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { NextResponse } from "next/server";
 
 // Функция для безопасной сериализации только BigInt полей

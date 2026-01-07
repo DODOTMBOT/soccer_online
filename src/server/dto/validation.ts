@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { Position, VflStyle, DefenseType, Formation, Mentality, TeamSpirit } from "@prisma/client";
+import { Position } from "@prisma/client";
+
+// Экспортируем схемы матчей из соседнего файла
+export * from "./match.dto";
 
 // --- УТИЛИТЫ ---
 const emptyString = z.string().min(1, "Поле обязательно");
@@ -51,19 +54,5 @@ export const createPlayerSchema = z.object({
   specGkPos: numberOrString.optional().default(0),
 });
 
-// --- СХЕМЫ ДЛЯ СОСТАВА (Lineup) ---
-export const matchLineupSchema = z.object({
-  matchId: emptyString,
-  teamId: emptyString,
-  playerIds: z.array(z.string()).length(11, "В основе должно быть ровно 11 игроков"),
-  subIds: z.array(z.string()).optional().default([]),
-  
-  tactic: z.nativeEnum(VflStyle).default("NORMAL"),
-  defenseSetup: z.nativeEnum(DefenseType).default("ZONAL"),
-  formation: z.nativeEnum(Formation).default("F442"),
-  mentality: z.nativeEnum(Mentality).default("NORMAL"),
-  spirit: z.nativeEnum(TeamSpirit).default("NORMAL"),
-});
-
-// --- СХЕМА: МАССОВОЕ СОЗДАНИЕ ИГРОКОВ (Для формы "Реестр") ---
+// --- СХЕМА: МАССОВОЕ СОЗДАНИЕ ИГРОКОВ ---
 export const createPlayersBulkSchema = z.array(createPlayerSchema);

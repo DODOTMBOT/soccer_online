@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { Sidebar } from "@/components/admin/Sidebar";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Trophy, ChevronRight, AlertCircle } from "lucide-react";

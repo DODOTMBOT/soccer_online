@@ -1,9 +1,9 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { getPriceFromPlayerObject } from "@/lib/economy";
-import { createPlayerSchema } from "@/src/lib/validation";
+import { getPriceFromPlayerObject } from "@/src/shared/utils/economy";
+import { createPlayerSchema } from "@/src/server/dto/validation";
 
 export async function POST(req: Request) {
   try {

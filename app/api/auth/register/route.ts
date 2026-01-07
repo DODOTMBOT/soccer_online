@@ -1,55 +1,26 @@
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import bcrypt from "bcrypt";
+import { UserService } from "@/src/server/services/user.service";
+import { z } from "zod";
+
+const registerSchema = z.object({
+  login: z.string().min(3),
+  email: z.string().email(),
+  password: z.string().min(6)
+});
 
 export async function POST(req: Request) {
   try {
-    // Проверка метода (на всякий случай)
-    if (req.method !== "POST") {
-      return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
-    }
-
     const body = await req.json();
-    const { login, name, surname, email, password } = body;
-
-    if (!login || !email || !password) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    
+    const result = registerSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json({ error: result.error.issues[0].message }, { status: 400 });
     }
 
-    const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ email }, { login }] }
-    });
+    const user = await UserService.register(result.data);
 
-    if (existingUser) {
-      return NextResponse.json({ error: "User already exists" }, { status: 400 });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = await prisma.user.create({
-      data: {
-        login,
-        name,
-        surname,
-        email,
-        password: hashedPassword,
-        role: "USER"
-      }
-    });
-
-    return NextResponse.json(
-      { success: true, message: "User registered" }, 
-      { 
-        status: 201,
-        headers: { "Content-Type": "application/json" } 
-      }
-    );
-
+    return NextResponse.json({ user, message: "Регистрация успешна" }, { status: 201 });
   } catch (error: any) {
-    console.error("API_REGISTER_ERROR:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error", details: error.message }, 
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

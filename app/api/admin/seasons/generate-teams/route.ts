@@ -1,8 +1,8 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { NextResponse } from "next/server";
 import { REAL_CLUBS_DB } from "@/lib/data/real-clubs";
 import { REAL_PLAYERS_DB } from "@/lib/data/real-players"; // База реальных игроков
-import { FORM_CURVE } from "@/lib/rules/fitness"; // Синусоида формы
+import { FORM_CURVE } from "@/src/server/domain/rules/fitness"; // Синусоида формы
 import { Position, VflStyle } from "@prisma/client";
 
 // --- Функция генерации ботов (если клуба нет в REAL_PLAYERS_DB) ---

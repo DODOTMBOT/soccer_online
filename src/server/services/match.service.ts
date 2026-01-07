@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/prisma";
-import { playMatch, EngineTeam, EnginePlayer } from "@/src/services/engine/core";
+import { prisma } from "@/src/server/db";
+import { playMatch, EngineTeam, EnginePlayer } from "@/src/server/domain/engine/core";
 import { Prisma } from "@prisma/client";
 
 export class MatchService {

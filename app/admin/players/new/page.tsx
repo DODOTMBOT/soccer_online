@@ -1,6 +1,6 @@
 // app/admin/players/new/page.tsx
 
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";

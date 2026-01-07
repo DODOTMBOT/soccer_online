@@ -1,5 +1,5 @@
 import React from 'react';
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import { notFound } from "next/navigation";
 import { Sidebar } from "@/components/admin/Sidebar";
 import { TeamHeader } from "@/components/admin/team/TeamHeader";

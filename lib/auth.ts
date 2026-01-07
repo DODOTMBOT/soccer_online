@@ -1,6 +1,6 @@
 import { NextAuthOptions, DefaultSession } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 

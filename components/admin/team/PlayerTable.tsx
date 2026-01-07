@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { getPriceFromPlayerObject } from "@/lib/economy";
-import { FITNESS_RULES } from "@/lib/rules/fitness"; // Импортируем правила
+import { getPriceFromPlayerObject } from "@/src/shared/utils/economy";
+import { FITNESS_RULES } from "@/src/server/domain/rules/fitness"; // Импортируем правила
 
 // Иерархия позиций (без изменений)
 const POSITION_WEIGHTS: Record<string, number> = {

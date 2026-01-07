@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { MatchService } from "@/src/services/match-service"; // Импорт нового сервиса
+import { MatchService } from "@/src/server/services/match.service"; // Импорт нового сервиса
 import { revalidatePath } from "next/cache";
 
 export async function POST(

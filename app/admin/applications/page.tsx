@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, X, User, Shield } from "lucide-react";
 import toast from "react-hot-toast";
-import { prisma } from "@/lib/prisma"; // Нельзя использовать prisma на клиенте!
+import { prisma } from "@/src/server/db"; // Нельзя использовать prisma на клиенте!
 // Нам нужен API для получения заявок. Давай сделаем fetch прямо в компоненте через серверный экшен или просто новый API.
 // Для простоты сделаем новый GET роут или используем useEffect с API.
 // Создадим быстрый API для GET заявок ниже.

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Search, ChevronRight, Trophy, Activity, TrendingUp } from 'lucide-react';
 import { Sidebar } from '@/components/admin/Sidebar';
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/src/server/db";
 
 export default async function SoccerDashboard() {
   const teamsCount = await prisma.team.count();
