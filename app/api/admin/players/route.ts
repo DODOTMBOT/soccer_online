@@ -2,8 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { Position } from "@prisma/client";
 import { getPriceFromPlayerObject } from "@/lib/economy";
+import { createPlayerSchema } from "@/src/lib/validation";
 
 export async function POST(req: Request) {
   try {
@@ -13,53 +13,53 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { 
-      firstName, lastName, age, mainPosition, sidePosition, power, 
-      teamId, countryId, formIndex
-    } = body;
 
-    if (!firstName || !lastName || !teamId || !countryId || !mainPosition) {
-      return NextResponse.json({ error: "Недостаточно данных" }, { status: 400 });
+    const result = createPlayerSchema.safeParse(body);
+    if (!result.success) {
+      // ИСПРАВЛЕНО: .issues вместо .errors
+      return NextResponse.json(
+        { error: result.error.issues[0].message }, 
+        { status: 400 }
+      );
     }
 
-    const calculatedPrice = getPriceFromPlayerObject(body);
+    const data = result.data;
+    const calculatedPrice = getPriceFromPlayerObject(data);
 
     const newPlayer = await prisma.player.create({
       data: {
-        firstName,
-        lastName,
-        age: Number(age),
-        mainPosition: mainPosition as Position,
-        sidePosition: (sidePosition as Position) || null,
-        power: Number(power),
-        price: calculatedPrice, 
-        fatigue: 0,
-        fitness: 100,
-        currentForm: 100,
-        formIndex: Number(formIndex) || 0,
-
-        team: { connect: { id: teamId } },
-        country: { connect: { id: countryId } },
+        firstName: data.firstName,
+        lastName: data.lastName,
+        age: data.age,
+        mainPosition: data.mainPosition,
+        sidePosition: data.sidePosition || null,
+        power: data.power,
+        price: BigInt(calculatedPrice),
         
-        // Маппинг специализаций под твою схему
-        specSpeed: Number(body.specSpd) || 0,
-        specHeading: Number(body.specHeading) || 0,
-        specLongPass: Number(body.specLong) || 0,
-        specShortPass: Number(body.specShortPass) || 0,
-        specDribbling: Number(body.specKt) || 0,
-        specCombination: Number(body.specCombination) || 0,
-        specTackling: Number(body.specTackling) || 0,
-        specMarking: Number(body.specMarking) || 0,
-        specShooting: Number(body.specZv) || 0,
-        specFreeKicks: Number(body.specSt) || 0,
-        specCorners: Number(body.specCorners) || 0,
-        specPenalty: Number(body.specPenalty) || 0,
-        specCaptain: Number(body.specL) || 0,
-        specLeader: Number(body.specKi) || 0,
-        specAthleticism: Number(body.specPhys) || 0,
-        specSimulation: Number(body.specSimulation) || 0,
-        specGkReflexes: Number(body.specGkRea) || 0,
-        specGkOut: Number(body.specGkPos) || 0,
+        // ВАЖНО: Используем простые ID вместо connect для UncheckedCreateInput
+        teamId: data.teamId,
+        countryId: data.countryId,
+        
+        formIndex: data.formIndex,
+        
+        specSpeed: data.specSpd,
+        specHeading: data.specHeading,
+        specLongPass: data.specLong,
+        specShortPass: data.specShortPass,
+        specDribbling: data.specKt,
+        specCombination: data.specCombination,
+        specTackling: data.specTackling,
+        specMarking: data.specMarking,
+        specShooting: data.specZv,
+        specFreeKicks: data.specSt,
+        specCorners: data.specCorners,
+        specPenalty: data.specPenalty,
+        specCaptain: data.specL,
+        specLeader: data.specKi,
+        specAthleticism: data.specPhys,
+        specSimulation: data.specSimulation,
+        specGkReflexes: data.specGkRea,
+        specGkOut: data.specGkPos,
       },
     });
 
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     return NextResponse.json(serializedPlayer, { status: 201 });
 
   } catch (error: any) {
-    console.error("API_PLAYER_CREATE_ERROR:", error);
+    console.error("PLAYER_CREATE_ERROR:", error);
     return NextResponse.json(
       { error: "Ошибка при сохранении", details: error.message }, 
       { status: 500 }
