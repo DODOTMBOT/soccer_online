@@ -1,35 +1,72 @@
-import { prisma } from "@/src/server/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/src/server/auth";
-import { redirect } from "next/navigation";
-import { LayoutDashboard, Swords } from "lucide-react";
-import Link from "next/link";
-import MatchEngine from "./MatchEngine";
+"use client";
+import { useState, useEffect } from "react";
+import { Loader2, Users } from "lucide-react";
 
-export default async function GeneratorPage() {
-  const session = await getServerSession(authOptions);
-  if (!session || (session.user as any).role !== "ADMIN") redirect("/");
+export default function GeneratorPage() {
+  const [leagues, setLeagues] = useState<any[]>([]);
+  const [selectedLeague, setSelectedLeague] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const teams = await prisma.team.findMany({
-    include: { players: true },
-    orderBy: { name: 'asc' }
-  });
+  // Загружаем список лиг при входе
+  useEffect(() => {
+    fetch("/api/admin/leagues").then(res => res.json()).then(setLeagues);
+  }, []);
+
+  const handleGenerate = async () => {
+    if (!selectedLeague) return alert("Выберите лигу!");
+    setLoading(true);
+    
+    try {
+      const res = await fetch("/api/admin/seed/players", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          leagueId: selectedLeague,
+          targetCount: 22, // Сколько игроков должно быть в команде
+          minPower: 50,
+          maxPower: 70
+        })
+      });
+      const data = await res.json();
+      alert(data.message || data.error);
+    } catch (e) {
+      alert("Ошибка!");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5] flex font-sans">
-      <aside className="w-64 bg-white border-r border-slate-100 flex flex-col p-6 shrink-0">
-        <div className="mb-10 px-2">
-          <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800">Match <span className="text-emerald-500">Gen</span></h2>
+    <div className="p-10 max-w-2xl mx-auto">
+      <h1 className="text-2xl font-black uppercase mb-6 text-[#1a3151]">Генератор игроков</h1>
+      
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div>
+          <label className="text-xs font-bold uppercase text-slate-400 block mb-2">Выберите Дивизион</label>
+          <select 
+            className="w-full p-3 bg-slate-50 border rounded-lg font-bold text-sm"
+            onChange={(e) => setSelectedLeague(e.target.value)}
+          >
+            <option value="">-- Список лиг --</option>
+            {leagues.map((l: any) => (
+              <option key={l.id} value={l.id}>{l.name} ({l.country.name})</option>
+            ))}
+          </select>
         </div>
-        <nav className="space-y-2">
-          <Link href="/admin" className="flex items-center gap-4 px-5 py-3 text-slate-400 hover:bg-slate-50 rounded-2xl font-bold text-xs uppercase tracking-widest"><LayoutDashboard size={18} /> Dashboard</Link>
-          <Link href="/admin/generator" className="flex items-center gap-4 px-5 py-3 bg-slate-800 text-white rounded-2xl shadow-lg font-bold text-xs uppercase tracking-widest"><Swords size={18} /> Генератор</Link>
-        </nav>
-      </aside>
 
-      <main className="flex-1 p-6 overflow-y-auto">
-        <MatchEngine teams={teams} />
-      </main>
+        <button
+          onClick={handleGenerate}
+          disabled={loading}
+          className="w-full bg-[#e30613] text-white py-4 rounded-xl font-black uppercase tracking-widest hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+        >
+          {loading ? <Loader2 className="animate-spin" /> : <Users size={18} />}
+          Заполнить команды ботами
+        </button>
+        
+        <p className="text-[10px] text-slate-400 text-center">
+          *Создаст игроков до 22 человек в каждой команде выбранной лиги.
+        </p>
+      </div>
     </div>
   );
 }

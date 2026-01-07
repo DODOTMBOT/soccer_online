@@ -2,6 +2,7 @@ import React from 'react';
 import { Search, ChevronRight, Trophy, Activity, TrendingUp } from 'lucide-react';
 import { Sidebar } from '@/components/admin/Sidebar';
 import { prisma } from "@/src/server/db";
+import { DevTools } from "@/components/admin/DevTools"; // <--- 1. Добавлен импорт
 
 export default async function SoccerDashboard() {
   const teamsCount = await prisma.team.count();
@@ -27,6 +28,11 @@ export default async function SoccerDashboard() {
 
       <main className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="max-w-[1200px] mx-auto p-6 grid grid-cols-12 gap-6">
+          
+          {/* <--- 2. ВСТАВЛЕНА ПАНЕЛЬ РАЗРАБОТЧИКА ---> */}
+          <div className="col-span-12">
+            <DevTools />
+          </div>
           
           {/* LEFT: CONTENT (8 columns) */}
           <div className="col-span-12 lg:col-span-8 space-y-6">

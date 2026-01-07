@@ -21,6 +21,7 @@ const MENU_ITEMS = [
   { name: "Главная", href: "/", icon: ShieldCheck },
   { name: "Клубы", href: "/teams", icon: Activity },
   { name: "Правила", href: "/rules", icon: Activity },
+   { name: "Трансферы", href: "/market", icon: Briefcase },
   { name: "Свободные команды", href: "/teams/free", icon: Briefcase },
 ];
 

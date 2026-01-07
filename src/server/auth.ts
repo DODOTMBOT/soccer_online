@@ -6,13 +6,14 @@ import { compare } from "bcrypt";
 import { Role } from "@prisma/client";
 
 // --- РАСШИРЕНИЕ ТИПОВ NEXT-AUTH ---
+// Это нужно, чтобы TypeScript знал о наших кастомных полях (role, teamId, balance)
 declare module "next-auth" {
   interface Session {
     user: {
       id: string;
       role: Role;
       teamId?: string | null;
-      balance?: string; // ИСПРАВЛЕНО: string вместо number
+      balance?: string; // Важно: строка, так как BigInt не передается в JSON
     } & DefaultSession["user"]
   }
 
@@ -20,7 +21,7 @@ declare module "next-auth" {
     id: string;
     role: Role;
     teamId?: string | null;
-    balance?: string; // ИСПРАВЛЕНО: string вместо number
+    balance?: string;
   }
 }
 
@@ -29,7 +30,7 @@ declare module "next-auth/jwt" {
     id: string;
     role: Role;
     teamId?: string | null;
-    balance?: string; // ИСПРАВЛЕНО: string вместо number
+    balance?: string;
   }
 }
 
@@ -39,7 +40,7 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   pages: {
-    signIn: "/auth/signin",
+    signIn: "/auth/signin", // Убедись, что этот путь существует
   },
   providers: [
     CredentialsProvider({
@@ -53,6 +54,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Ищем пользователя по Email ИЛИ по Логину
         const user = await prisma.user.findFirst({
           where: { 
             OR: [
@@ -73,18 +75,21 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Возвращаем объект пользователя для JWT
+        // ВАЖНО: balance преобразуем в строку здесь
         return {
           id: user.id,
           email: user.email,
           name: user.login,
           role: user.role,
-          balance: user.balance.toString(), // ИСПРАВЛЕНО: toString() для сохранения BigInt
+          balance: user.balance.toString(), // BigInt -> String (Fix 500 error)
           teamId: user.managedTeam?.id || null,
         };
       },
     }),
   ],
   callbacks: {
+    // 1. При создании токена копируем данные из User
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
@@ -95,6 +100,7 @@ export const authOptions: NextAuthOptions = {
       }
       return token;
     },
+    // 2. При создании сессии копируем данные из токена в session.user
     async session({ session, token }) {
       if (session.user && token) {
         session.user.id = token.id;

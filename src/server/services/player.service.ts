@@ -1,14 +1,14 @@
 import { prisma } from "@/src/server/db";
 import { getPriceFromPlayerObject } from "@/src/shared/utils/economy";
-import { createPlayerSchema } from "@/src/server/dto/validation"; // Импорт схемы
+import { createPlayerSchema } from "@/src/server/dto/validation"; 
 import { z } from "zod";
 
-// Выводим TS тип из Zod схемы
+// Тип входных данных из Zod
 type CreatePlayerData = z.infer<typeof createPlayerSchema>;
 
 export class PlayerService {
   
-  // Строгая типизация входных данных
+  // 1. Создание игрока (Admin/System)
   static async create(data: CreatePlayerData) {
     const price = getPriceFromPlayerObject(data);
     
@@ -25,6 +25,10 @@ export class PlayerService {
         formIndex: data.formIndex,
         price: BigInt(price),
         
+        // Новые скрытые параметры (дефолтные значения, если их нет в DTO)
+        potential: 70, 
+        injuryProne: 10,
+
         // Спецухи
         specSpeed: data.specSpd,
         specHeading: data.specHeading,
@@ -48,7 +52,9 @@ export class PlayerService {
     });
   }
 
+  // 2. Массовое создание (для генератора)
   static async createBulk(playersData: CreatePlayerData[]) {
+    // Подготовка данных для createMany
     const dataToInsert = playersData.map(p => ({
       firstName: p.firstName,
       lastName: p.lastName,
@@ -64,8 +70,12 @@ export class PlayerService {
       fatigue: 0,
       fitness: 100,
       currentForm: 100,
+      
+      // Дефолтные скрытые параметры для Bulk (можно будет уточнить в генераторе)
+      potential: 70, 
+      injuryProne: 10,
 
-      // Спецухи (с фоллбеком на 0, если вдруг undefined, хотя Zod это ловит)
+      // Спецухи
       specSpeed: p.specSpd || 0,
       specHeading: p.specHeading || 0,
       specLongPass: p.specLong || 0,
@@ -90,5 +100,43 @@ export class PlayerService {
       data: dataToInsert,
       skipDuplicates: true
     });
+  }
+
+  // 3. Получение профиля игрока (Feature B)
+  static async getProfile(playerId: string, viewerTeamId?: string | null, isAdmin = false) {
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+      include: {
+        team: { select: { id: true, name: true, logo: true, league: true } },
+        country: { select: { id: true, name: true, flag: true } }
+      }
+    });
+
+    if (!player) return null;
+
+    // Права доступа: Админ или Владелец игрока видят скрытые статы
+    const isOwner = !!(viewerTeamId && player.teamId === viewerTeamId);
+    const canSeeHidden = isAdmin || isOwner;
+
+    return {
+      ...player,
+      // Преобразуем BigInt в строку для JSON
+      price: player.price ? player.price.toString() : "0",
+      transferPrice: player.transferPrice ? player.transferPrice.toString() : null,
+      
+      // Маскируем (скрываем) секретные поля для чужих глаз
+      potential: canSeeHidden ? player.potential : null,
+      injuryProne: canSeeHidden ? player.injuryProne : null,
+      
+      // Флаги для UI
+      isOwner,
+      displayPrice: player.price ? Number(player.price).toLocaleString('ru-RU') + " $" : "Не оценен",
+      
+      // Данные для рынка (Feature C)
+      market: {
+        isOnTransfer: player.isOnTransferList,
+        isOnLoan: player.isOnLoanList
+      }
+    };
   }
 }
