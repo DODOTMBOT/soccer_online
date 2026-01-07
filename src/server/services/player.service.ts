@@ -1,21 +1,31 @@
 import { prisma } from "@/src/server/db";
-import { getPriceFromPlayerObject } from "@/src/shared/utils/economy"; // Убедись, что economy там лежит
+import { getPriceFromPlayerObject } from "@/src/shared/utils/economy";
+import { createPlayerSchema } from "@/src/server/dto/validation"; // Импорт схемы
+import { z } from "zod";
+
+// Выводим TS тип из Zod схемы
+type CreatePlayerData = z.infer<typeof createPlayerSchema>;
 
 export class PlayerService {
   
-  static async create(data: any) {
+  // Строгая типизация входных данных
+  static async create(data: CreatePlayerData) {
     const price = getPriceFromPlayerObject(data);
     
-    // Zod данные уже проверены, но для createMany нужны чистые данные
-    // Здесь упрощенно передаем data, предполагая, что маппинг идет в контроллере или data совпадает с БД
     return prisma.player.create({
       data: {
-        ...data,
-        price: BigInt(price),
+        firstName: data.firstName,
+        lastName: data.lastName,
+        age: data.age,
+        power: data.power,
+        mainPosition: data.mainPosition,
         sidePosition: data.sidePosition || null,
-        // Маппинг полей спецух из DTO (camelCase) в БД (если они отличаются)
-        // В данном случае, если DTO совпадает с названиями в Prisma, можно оставить так
-        // Но лучше явно перечислить, если есть расхождения (как мы делали в validation.ts)
+        teamId: data.teamId,
+        countryId: data.countryId,
+        formIndex: data.formIndex,
+        price: BigInt(price),
+        
+        // Спецухи
         specSpeed: data.specSpd,
         specHeading: data.specHeading,
         specLongPass: data.specLong,
@@ -38,8 +48,7 @@ export class PlayerService {
     });
   }
 
-  static async createBulk(playersData: any[]) {
-    // Подготовка данных для insert
+  static async createBulk(playersData: CreatePlayerData[]) {
     const dataToInsert = playersData.map(p => ({
       firstName: p.firstName,
       lastName: p.lastName,
@@ -49,14 +58,14 @@ export class PlayerService {
       teamId: p.teamId,
       countryId: p.countryId,
       power: p.power,
-      price: BigInt(getPriceFromPlayerObject(p)), // Считаем цену
+      price: BigInt(getPriceFromPlayerObject(p)),
       
       formIndex: p.formIndex || 0,
       fatigue: 0,
       fitness: 100,
       currentForm: 100,
 
-      // Спецухи
+      // Спецухи (с фоллбеком на 0, если вдруг undefined, хотя Zod это ловит)
       specSpeed: p.specSpd || 0,
       specHeading: p.specHeading || 0,
       specLongPass: p.specLong || 0,

@@ -1,6 +1,6 @@
 import { prisma } from "@/src/server/db";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions } from "@/src/server/auth";
 import { NextResponse } from "next/server";
 import { getPriceFromPlayerObject } from "@/src/shared/utils/economy";
 import { createPlayerSchema } from "@/src/server/dto/validation";

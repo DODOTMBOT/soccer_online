@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
+import { authOptions } from "@/src/server/auth";
 import { prisma } from "@/src/server/db"; // Путь к вашему клиенту Prisma
 import { 
   Users, Trophy, Activity, ChevronRight, 

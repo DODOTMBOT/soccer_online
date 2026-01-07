@@ -1,6 +1,6 @@
 import { prisma } from "@/src/server/db";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions } from "@/src/server/auth";
 import { redirect } from "next/navigation";
 import { LayoutDashboard, Swords } from "lucide-react";
 import Link from "next/link";

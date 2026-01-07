@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth"; // Пока старый путь, если auth.ts не переносили
+import { authOptions } from "@/src/server/auth"; // Пока старый путь, если auth.ts не переносили
 import { createTeamSchema } from "@/src/server/dto/validation";
 import { TeamService } from "@/src/server/services/team.service";
 
