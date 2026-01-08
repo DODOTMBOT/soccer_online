@@ -6,14 +6,13 @@ import { compare } from "bcrypt";
 import { Role } from "@prisma/client";
 
 // --- РАСШИРЕНИЕ ТИПОВ NEXT-AUTH ---
-// Это нужно, чтобы TypeScript знал о наших кастомных полях (role, teamId, balance)
 declare module "next-auth" {
   interface Session {
     user: {
       id: string;
       role: Role;
       teamId?: string | null;
-      balance?: string; // Важно: строка, так как BigInt не передается в JSON
+      balance?: string;
     } & DefaultSession["user"]
   }
 
@@ -40,7 +39,7 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   pages: {
-    signIn: "/auth/signin", // Убедись, что этот путь существует
+    signIn: "/auth/signin",
   },
   providers: [
     CredentialsProvider({
@@ -54,7 +53,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Ищем пользователя по Email ИЛИ по Логину
+        // 1. Ищем пользователя
         const user = await prisma.user.findFirst({
           where: { 
             OR: [
@@ -69,38 +68,69 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // 2. Проверяем пароль
         const isPasswordValid = await compare(credentials.password, user.password);
 
         if (!isPasswordValid) {
           return null;
         }
 
-        // Возвращаем объект пользователя для JWT
-        // ВАЖНО: balance преобразуем в строку здесь
+        // 3. Возвращаем объект (Initial Sign In)
         return {
           id: user.id,
           email: user.email,
           name: user.login,
           role: user.role,
-          balance: user.balance.toString(), // BigInt -> String (Fix 500 error)
+          balance: user.balance.toString(),
           teamId: user.managedTeam?.id || null,
         };
       },
     }),
   ],
   callbacks: {
-    // 1. При создании токена копируем данные из User
-    async jwt({ token, user }) {
+    // КОЛЛБЭК JWT: Вызывается при создании токена И при обновлении сессии
+    async jwt({ token, user, trigger, session }) {
+      
+      // Сценарий 1: Первичный вход (Sign In)
+      // В этот момент аргумент 'user' заполнен данными из authorize
       if (user) {
         token.id = user.id;
         token.role = user.role;
         token.name = user.name;
         token.teamId = user.teamId;
         token.balance = user.balance;
+      } 
+      // Сценарий 2: Пользователь уже залогинен (Навигация / F5)
+      // Аргумента 'user' нет, но есть 'token.id'. Проверяем актуальные данные в БД.
+      else if (token.id) {
+        const freshUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: {
+            role: true,
+            balance: true,
+            managedTeam: {
+              select: { id: true }
+            }
+          }
+        });
+
+        if (freshUser) {
+          // Обновляем токен свежими данными из базы
+          token.teamId = freshUser.managedTeam?.id || null;
+          token.balance = freshUser.balance.toString();
+          token.role = freshUser.role;
+        }
       }
+
+      // Поддержка ручного обновления с клиента (await update({ balance: ... }))
+      if (trigger === "update" && session) {
+         return { ...token, ...session };
+      }
+
       return token;
     },
-    // 2. При создании сессии копируем данные из токена в session.user
+
+    // КОЛЛБЭК SESSION: Передает данные из токена на клиент
     async session({ session, token }) {
       if (session.user && token) {
         session.user.id = token.id;

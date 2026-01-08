@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link"; // <--- ДОБАВЛЕН ИМПОРТ
+import Link from "next/link";
 import { getPriceFromPlayerObject } from "@/src/shared/utils/economy";
 import { FITNESS_RULES } from "@/src/server/domain/rules/fitness";
-import { Player, Country, Position } from "@prisma/client";
+import { Player, Country } from "@prisma/client";
 
 // Тип для игрока с вложенной страной
 interface PlayerWithRelations extends Omit<Player, "price"> {
@@ -20,6 +20,7 @@ const POSITION_WEIGHTS: Record<string, number> = {
 
 interface PlayerTableProps {
   players: PlayerWithRelations[];
+  canViewHiddenStats: boolean; // <--- НОВЫЙ ПРОП
 }
 
 type SortConfig = {
@@ -43,7 +44,7 @@ const SPEC_LABELS: Record<string, string> = {
   specGkReflexes: 'Ref', specGkOut: 'Pos'
 };
 
-export function PlayerTable({ players }: PlayerTableProps) {
+export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'pos', direction: 'asc' });
 
   const calculateTotalSpecs = (p: PlayerWithRelations) => {
@@ -147,8 +148,15 @@ export function PlayerTable({ players }: PlayerTableProps) {
             <th onClick={() => requestSort('age')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00]">В</th>
             <th onClick={() => requestSort('cond')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00]" title="Усталость">У</th>
             <th onClick={() => requestSort('form')} className="p-1 border-r border-white/20 text-center w-10 hover:bg-[#004d00]" title="Физ. форма">Ф</th>
-            <th onClick={() => requestSort('potential')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00] text-blue-200" title="Потенциал">П</th>
-            <th onClick={() => requestSort('injuryProne')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00] text-orange-200" title="Травматичность">Т</th>
+            
+            {/* СКРЫВАЕМ ЗАГОЛОВКИ, ЕСЛИ НЕТ ПРАВ */}
+            {canViewHiddenStats && (
+              <>
+                <th onClick={() => requestSort('potential')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00] text-blue-200" title="Потенциал">П</th>
+                <th onClick={() => requestSort('injuryProne')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00] text-orange-200" title="Травматичность">Т</th>
+              </>
+            )}
+
             <th onClick={() => requestSort('power')} className="p-1 border-r border-white/20 text-center w-12 text-yellow-300 hover:bg-[#004d00]" title="Реальная Сила">РС</th>
             <th onClick={() => requestSort('specs')} className="p-1 border-r border-white/20 text-left pl-2 hover:bg-[#004d00]">Спецвозможности</th>
             <th onClick={() => requestSort('price')} className="p-1 text-right pr-4 w-28 hover:bg-[#004d00]">Цена</th>
@@ -163,9 +171,12 @@ export function PlayerTable({ players }: PlayerTableProps) {
             return (
               <tr key={p.id} className={`${idx % 2 === 0 ? 'bg-[#e8f5e9]' : 'bg-[#f1f8e9]'} hover:bg-yellow-100 border-b border-gray-200 transition-colors group`}>
                 <td className="p-1 border-r border-gray-300 text-center font-bold text-emerald-800">{idx + 1}</td>
-                <td className="p-1 border-r border-gray-300 text-center text-[10px]">{p.potential > 85 ? '⭐' : '👤'}</td>
                 
-                {/* --- ВОТ ЗДЕСЬ ИЗМЕНЕНИЕ --- */}
+                {/* Если прав нет, всегда показываем силуэт или пустую ячейку вместо звездочки потенциала */}
+                <td className="p-1 border-r border-gray-300 text-center text-[10px]">
+                  {canViewHiddenStats && p.potential > 85 ? '⭐' : '👤'}
+                </td>
+                
                 <td className="p-1 border-r border-gray-300 pl-4 font-black text-emerald-900 uppercase">
                   <Link 
                     href={`/players/${p.id}`} 
@@ -174,7 +185,6 @@ export function PlayerTable({ players }: PlayerTableProps) {
                     {p.firstName.charAt(0)}. {p.lastName}
                   </Link>
                 </td>
-                {/* --------------------------- */}
 
                 <td className="p-1 border-r border-gray-300 text-center">
                   {p.country?.flag ? <img src={p.country.flag} alt={p.country.name} className="w-4 h-2.5 inline shadow-sm" /> : '-'}
@@ -192,8 +202,14 @@ export function PlayerTable({ players }: PlayerTableProps) {
                   {formPercent}%
                 </td>
                 
-                <td className="p-1 border-r border-gray-300 text-center font-bold text-blue-600 bg-blue-50/30">{p.potential}</td>
-                <td className="p-1 border-r border-gray-300 text-center font-bold text-orange-700 bg-orange-50/30">{p.injuryProne}</td>
+                {/* СКРЫВАЕМ ЯЧЕЙКИ С ДАННЫМИ, ЕСЛИ НЕТ ПРАВ */}
+                {canViewHiddenStats && (
+                  <>
+                    <td className="p-1 border-r border-gray-300 text-center font-bold text-blue-600 bg-blue-50/30">{p.potential}</td>
+                    <td className="p-1 border-r border-gray-300 text-center font-bold text-orange-700 bg-orange-50/30">{p.injuryProne}</td>
+                  </>
+                )}
+
                 <td className="p-1 border-r border-gray-300 text-center font-black text-[#000c2d] bg-yellow-50/50">
                    {realPower}
                 </td>

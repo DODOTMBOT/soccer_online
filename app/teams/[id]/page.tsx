@@ -49,8 +49,12 @@ export default async function TeamPage({ params, searchParams }: any) {
 
   if (!team) notFound();
 
-  // 4. Проверка прав Менеджера
+  // 4. Проверка прав (Менеджер или Админ)
   const isManager = session?.user?.id === team.managerId;
+  const isAdmin = session?.user?.role === "ADMIN"; // Проверяем роль
+  
+  // Логика видимости скрытых статов
+  const canViewHiddenStats = isManager || isAdmin;
 
   // 5. Данные для матчей
   const seasons = await prisma.season.findMany({ orderBy: { year: 'desc' } });
@@ -74,7 +78,7 @@ export default async function TeamPage({ params, searchParams }: any) {
 
   // 6. ЗАГРУЗКА СДЕЛОК (Только если таб=deals и юзер=менеджер)
   let marketData = { incoming: [], outgoing: [] };
-  let debugStatus = "NOT LOADING"; // Для отладки на экране
+  let debugStatus = "NOT LOADING";
 
   if (tab === 'deals') {
     if (isManager) {
@@ -97,7 +101,7 @@ export default async function TeamPage({ params, searchParams }: any) {
   const tabs = [
     { name: 'Игроки', key: 'players' },
     { name: 'Матчи', key: 'matches' },
-    { name: 'Сделки', key: 'deals' }, // Показываем всем, чтобы ты мог кликнуть и проверить
+    { name: 'Сделки', key: 'deals' },
     { name: 'Финансы', key: 'finance' },
   ];
 
@@ -112,16 +116,18 @@ export default async function TeamPage({ params, searchParams }: any) {
             team={team} 
             upcomingMatchId={upcomingMatch?.id} 
             hasSetup={hasSetup} 
+            isManager={isManager}
           />
 
-          {/* ОТЛАДОЧНАЯ ПАНЕЛЬ (КРАСНАЯ) */}
+          {/* ОТЛАДОЧНАЯ ПАНЕЛЬ */}
           <div className="bg-red-100 border-l-4 border-red-500 p-4 text-xs font-mono text-red-900">
             <p><strong>DEBUG SCREEN:</strong></p>
             <p>Tab: <b>{tab}</b></p>
             <p>My User ID: {session?.user?.id}</p>
             <p>Team Manager ID: {team.managerId}</p>
             <p>Am I Manager?: <b>{isManager ? "YES" : "NO"}</b></p>
-            <p>Deals Status: <b>{debugStatus}</b></p>
+            <p>Is Admin?: <b>{isAdmin ? "YES" : "NO"}</b></p>
+            <p>Can View Hidden?: <b>{canViewHiddenStats ? "YES" : "NO"}</b></p>
           </div>
 
           <div className="flex items-center gap-1 border-b border-gray-300 text-[11px] font-bold uppercase tracking-tight overflow-x-auto no-scrollbar bg-white px-2">
@@ -143,7 +149,10 @@ export default async function TeamPage({ params, searchParams }: any) {
 
           {tab === 'players' && (
             <div className="w-full">
-              <PlayerTable players={team.players} />
+              <PlayerTable 
+                players={team.players} 
+                canViewHiddenStats={canViewHiddenStats} // <--- ПЕРЕДАЕМ ПРОП
+              />
             </div>
           )}
 

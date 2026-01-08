@@ -5,31 +5,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { 
-  ShieldCheck, 
-  Activity, 
-  Plus, 
-  Search, 
-  Bell, 
-  LogOut,
-  Coins,
-  Briefcase,
-  Settings // Заменим на Settings для иконки админки
+  ShieldCheck, Activity, Search, Bell, LogOut, Coins, Briefcase, Settings, UserPlus
 } from "lucide-react";
 
-// Основное меню навигации
 const MENU_ITEMS = [
   { name: "Главная", href: "/", icon: ShieldCheck },
   { name: "Клубы", href: "/teams", icon: Activity },
+  { name: "Трансферы", href: "/market", icon: Briefcase },
   { name: "Правила", href: "/rules", icon: Activity },
-   { name: "Трансферы", href: "/market", icon: Briefcase },
-  { name: "Свободные команды", href: "/teams/free", icon: Briefcase },
 ];
 
 export function Sidebar() {
   const { data: session } = useSession();
   const pathname = usePathname();
   
-  // Оставляем только меню пользователя
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -61,7 +50,7 @@ export function Sidebar() {
   return (
     <header className="h-16 bg-[#000c2d] px-8 flex items-center justify-between shrink-0 text-white z-50 sticky top-0 shadow-xl border-b border-white/5">
       
-      {/* ЛЕВАЯ ЧАСТЬ: ЛОГОТИП И ССЫЛКИ */}
+      {/* ЛЕВАЯ ЧАСТЬ */}
       <div className="flex items-center gap-8">
         <Link href="/">
           <h1 className="text-xl font-black uppercase tracking-tighter text-white">
@@ -85,52 +74,51 @@ export function Sidebar() {
             );
           })}
 
+          {/* ЛОГИКА КНОПКИ КОМАНДЫ */}
           {session?.user && (
-            <Link
-              href={teamId ? `/admin/teams/${teamId}` : "/teams/free"}
-              className={`px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${
-                teamId 
-                  ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-600/20" 
-                  : "bg-amber-600/10 text-amber-400 border-amber-500/30 hover:bg-amber-600/20"
-              }`}
-            >
-              <div className={`w-1.5 h-1.5 rounded-full ${teamId ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-              {teamId ? "Моя команда" : "Без команды"}
-            </Link>
+            teamId ? (
+              <Link
+                href={`/teams/${teamId}`}
+                className="px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border bg-emerald-600/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-600/20"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Моя команда
+              </Link>
+            ) : (
+              <Link
+                href="/teams/free"
+                className="px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border bg-white/10 text-white border-white/20 hover:bg-white/20 animate-pulse"
+              >
+                <UserPlus size={14} />
+                Взять команду
+              </Link>
+            )
           )}
 
-          {/* --- ПРЯМАЯ ССЫЛКА В АДМИНКУ --- */}
           {userRole === "ADMIN" && (
             <Link
               href="/admin"
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                pathname.startsWith("/admin") && pathname !== `/admin/teams/${teamId}` 
-                  ? "bg-white/20 text-white" 
-                  : "text-gray-300 hover:text-white hover:bg-white/10"
+                pathname.startsWith("/admin") ? "bg-white/20 text-white" : "text-gray-300 hover:text-white hover:bg-white/10"
               }`}
             >
               <Settings size={14} className="text-[#e30613]" />
-              Админ-панель
+              Админка
             </Link>
           )}
         </nav>
       </div>
 
-      {/* ПРАВАЯ ЧАСТЬ: БАЛАНС И ПРОФИЛЬ */}
+      {/* ПРАВАЯ ЧАСТЬ */}
       <div className="flex items-center gap-6">
         {session?.user && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-sm hover:bg-white/10 transition-colors">
             <Coins size={14} className="text-yellow-500" />
             <span className="text-[11px] font-black tracking-tighter text-white">
-              {formatBalance(userBalance)}
+              {formatBalance(userBalance)} $
             </span>
           </div>
         )}
-
-        <div className="flex items-center gap-4 border-r border-white/10 pr-6">
-          <Search size={18} className="text-gray-400 cursor-pointer hover:text-white transition-colors" />
-          <Bell size={18} className="text-gray-400 cursor-pointer hover:text-white transition-colors" />
-        </div>
 
         <div className="relative" ref={userMenuRef}>
           <div 
@@ -151,23 +139,13 @@ export function Sidebar() {
           </div>
 
           {isUserMenuOpen && session && (
-            <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-sm shadow-2xl border border-gray-200 py-2 animate-in fade-in slide-in-from-top-2 text-[#000c2d]">
-              <div className="px-4 py-2 border-b border-gray-100 mb-1">
-                <p className="text-[8px] font-black text-gray-400 uppercase">Account ID</p>
-                <p className="text-[10px] font-bold truncate opacity-60 italic">{session.user.id}</p>
-              </div>
-              
-              <Link href="/profile" className="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold uppercase hover:bg-gray-50 transition-colors">
-                <ShieldCheck size={14} className="text-gray-400" />
-                Профиль менеджера
-              </Link>
-
-              <button 
+            <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-sm shadow-2xl border border-gray-200 py-2 text-[#000c2d]">
+               <button 
                 onClick={() => signOut({ callbackUrl: "/auth" })}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-50 transition-colors border-t border-gray-50 mt-1"
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-50 transition-colors"
               >
                 <LogOut size={14} />
-                Выход из системы
+                Выход
               </button>
             </div>
           )}
