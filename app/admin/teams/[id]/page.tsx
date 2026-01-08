@@ -113,7 +113,7 @@ export default async function TeamDetailsDashboard({ params, searchParams }: any
             team={team} 
             upcomingMatchId={upcomingMatch?.id} 
             hasSetup={hasSetup}
-            isManager={true} // <--- ИСПРАВЛЕНИЕ: Админ всегда имеет права менеджера
+            isManager={true} // Админ всегда имеет права менеджера
           />
 
           <div className="flex items-center gap-1 border-b border-gray-300 text-[11px] font-bold uppercase tracking-tight overflow-x-auto no-scrollbar bg-white px-2">
@@ -135,7 +135,10 @@ export default async function TeamDetailsDashboard({ params, searchParams }: any
 
           {tab === 'players' && (
             <div className="w-full">
-              <PlayerTable players={team.players} />
+              <PlayerTable 
+                players={team.players} 
+                canViewHiddenStats={true} 
+              />
             </div>
           )}
 

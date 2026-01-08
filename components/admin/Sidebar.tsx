@@ -5,11 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { 
-  ShieldCheck, Activity, Search, Bell, LogOut, Coins, Briefcase, Settings, UserPlus
+  ShieldCheck, Activity, Search, Bell, LogOut, Coins, Briefcase, Settings, UserPlus, CalendarClock 
 } from "lucide-react";
 
 const MENU_ITEMS = [
   { name: "Главная", href: "/", icon: ShieldCheck },
+  { name: "Расписание", href: "/admin/schedule", icon: CalendarClock }, // Теперь иконка импортирована корректно
   { name: "Клубы", href: "/teams", icon: Activity },
   { name: "Трансферы", href: "/market", icon: Briefcase },
   { name: "Правила", href: "/rules", icon: Activity },
@@ -61,14 +62,16 @@ export function Sidebar() {
         <nav className="flex gap-2 items-center">
           {MENU_ITEMS.map((item) => {
             const isActive = pathname === item.href;
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                className={`px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
                   isActive ? "bg-[#e30613] text-white" : "text-gray-300 hover:text-white hover:bg-white/10"
                 }`}
               >
+                <Icon size={14} />
                 {item.name}
               </Link>
             );
@@ -99,7 +102,7 @@ export function Sidebar() {
             <Link
               href="/admin"
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                pathname.startsWith("/admin") ? "bg-white/20 text-white" : "text-gray-300 hover:text-white hover:bg-white/10"
+                pathname.startsWith("/admin") && pathname !== "/admin/schedule" ? "bg-white/20 text-white" : "text-gray-300 hover:text-white hover:bg-white/10"
               }`}
             >
               <Settings size={14} className="text-[#e30613]" />

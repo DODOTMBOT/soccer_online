@@ -1,18 +1,16 @@
+// app/api/admin/seasons/generate-calendar/route.ts
 import { prisma } from "@/src/server/db";
 import { NextResponse } from "next/server";
+import { SchedulerService } from "@/src/server/services/scheduler.service";
 
-// Алгоритм Бергера для круговой системы
+// Алгоритм Бергера (для генерации пар)
 function generateSchedule(teams: string[]) {
   const schedule = [];
   const numberOfTeams = teams.length;
-  
-  // Если команд нечетное количество, добавляем виртуального соперника
   if (numberOfTeams % 2 !== 0) teams.push("BYE");
-
   const n = teams.length;
   const rounds = n - 1;
   const half = n / 2;
-  
   const currentTeams = [...teams];
 
   for (let round = 0; round < rounds; round++) {
@@ -20,19 +18,12 @@ function generateSchedule(teams: string[]) {
     for (let i = 0; i < half; i++) {
       const home = currentTeams[i];
       const away = currentTeams[n - 1 - i];
-      
       if (home !== "BYE" && away !== "BYE") {
-        // Чередуем хозяев, чтобы у команд не было длинных серий "дома" или "в гостях"
-        if (round % 2 === 0) {
-          roundMatches.push({ home, away });
-        } else {
-          roundMatches.push({ home: away, away: home });
-        }
+        if (round % 2 === 0) roundMatches.push({ home, away });
+        else roundMatches.push({ home: away, away: home });
       }
     }
     schedule.push(roundMatches);
-    
-    // Вращение массива: фиксируем первый элемент [0], остальные сдвигаем
     currentTeams.splice(1, 0, currentTeams.pop()!);
   }
   return schedule;
@@ -41,88 +32,94 @@ function generateSchedule(teams: string[]) {
 export async function POST(req: Request) {
   try {
     const { seasonId } = await req.json();
-
     if (!seasonId) return NextResponse.json({ error: "ID сезона обязателен" }, { status: 400 });
 
-    // 1. Получаем все лиги, привязанные к этому сезону
+    console.log("=== START CALENDAR GENERATION ===");
+
+    // 1. Инициализируем таймлайн
+    try {
+      await SchedulerService.initSeasonTimeline(seasonId);
+    } catch (e: any) {
+      console.error("Timeline Init Error:", e);
+      return NextResponse.json({ error: `Ошибка инициализации дней: ${e.message}` }, { status: 500 });
+    }
+
     const leagues = await prisma.league.findMany({
       where: { seasonId },
       include: { teams: { select: { id: true } } }
     });
 
     if (leagues.length === 0) {
-      return NextResponse.json({ error: "В сезоне нет лиг. Сначала выполните 'Шаг 1: Создать Дивизионы'." }, { status: 400 });
+      return NextResponse.json({ error: "Нет лиг в сезоне" }, { status: 400 });
     }
 
-    // ИСПРАВЛЕНИЕ: Явно указываем тип any[]
     const matchesToCreate: any[] = [];
-    let leaguesProcessed = 0;
-
+    
+    // 2. Создаем структуру матчей в памяти
     for (const league of leagues) {
       const teams = league.teams.map(t => t.id);
+      
+      // Генерация возможна только для четного кол-ва (обычно 16)
+      if (teams.length < 2) continue; 
 
-      // Строгая проверка регламента (16 команд)
-      if (teams.length !== 16) {
-        console.warn(`⚠️ Лига ${league.name} (ID: ${league.id}) пропущена: ${teams.length} команд вместо 16.`);
-        continue;
-      }
-
-      // Перемешиваем команды перед жеребьевкой, чтобы календарь не был одинаковым каждый сезон
       const shuffledTeams = teams.sort(() => 0.5 - Math.random());
-
-      // Генерируем сетку 1-го круга (15 туров)
       const firstLeg = generateSchedule(shuffledTeams);
 
-      // --- КРУГ 1 ---
+      // Круг 1
       firstLeg.forEach((roundMatches, roundIndex) => {
         const tour = roundIndex + 1;
         roundMatches.forEach(match => {
           matchesToCreate.push({
-            seasonId,
-            leagueId: league.id,
-            homeTeamId: match.home,
-            awayTeamId: match.away,
-            tour: tour,
-            status: "UPCOMING"
+            seasonId, leagueId: league.id,
+            homeTeamId: match.home, awayTeamId: match.away,
+            tour: tour, status: "UPCOMING"
           });
         });
       });
 
-      // --- КРУГ 2 (Ответные матчи) ---
+      // Круг 2
       firstLeg.forEach((roundMatches, roundIndex) => {
-        const tour = roundIndex + 1 + 15; // Туры с 16 по 30
+        const tour = roundIndex + 1 + firstLeg.length; // +15 туров
         roundMatches.forEach(match => {
           matchesToCreate.push({
-            seasonId,
-            leagueId: league.id,
-            homeTeamId: match.away, // Меняем стороны: Гости становятся Хозяевами
-            awayTeamId: match.home,
-            tour: tour,
-            status: "UPCOMING"
+            seasonId, leagueId: league.id,
+            homeTeamId: match.away, awayTeamId: match.home,
+            tour: tour, status: "UPCOMING"
           });
         });
       });
-
-      leaguesProcessed++;
     }
 
     if (matchesToCreate.length === 0) {
-      return NextResponse.json({ error: "Не удалось создать матчи. Убедитесь, что в лигах ровно по 16 команд." }, { status: 400 });
+      return NextResponse.json({ error: "Матчи не созданы (проверьте количество команд в лигах)" }, { status: 400 });
     }
 
-    // Очищаем старые матчи этого сезона (если перегенерируем)
+    console.log(`Deleting old matches for season ${seasonId}...`);
+    // Очистка старых матчей
     await prisma.match.deleteMany({ where: { seasonId } });
 
-    // Массовое сохранение (оптимизировано)
+    console.log(`Creating ${matchesToCreate.length} matches...`);
+    // Создание новых матчей
     await prisma.match.createMany({ data: matchesToCreate });
 
+    // 3. Распределяем матчи по дням
+    console.log("Scheduling matches to timeline...");
+    let scheduledCount = 0;
+    for (const league of leagues) {
+      if (league.teams.length >= 2) {
+        const res = await SchedulerService.scheduleLeagueMatches(league.id, seasonId);
+        scheduledCount += res.toursCount;
+      }
+    }
+
+    console.log("=== CALENDAR GENERATED SUCCESSFULLY ===");
     return NextResponse.json({ 
       success: true, 
-      message: `Календарь успешно создан!\nЛиг: ${leaguesProcessed}\nМатчей: ${matchesToCreate.length}` 
+      message: `Создано ${matchesToCreate.length} матчей, распределено ${scheduledCount} туров.` 
     });
 
   } catch (error: any) {
     console.error("CALENDAR_GEN_ERROR:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Unknown error" }, { status: 500 });
   }
 }

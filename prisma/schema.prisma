@@ -1,4 +1,4 @@
-// schema.prisma
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -110,7 +110,6 @@ enum ApplicationStatus {
   REJECTED
 }
 
-// НОВЫЕ ENUMS ДЛЯ РЫНКА
 enum ListingType {
   TRANSFER
   LOAN
@@ -123,7 +122,42 @@ enum OfferStatus {
   EXPIRED
 }
 
-// --- МОДЕЛИ ---
+// --- НОВЫЕ МОДЕЛИ ДЛЯ КАЛЕНДАРЯ ---
+
+model GameDay {
+  id          String   @id @default(cuid())
+  seasonId    String
+  season      Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  
+  number      Int      // Порядковый номер дня (1, 2, 3...)
+  label       String?  // Виртуальное отображение (напр. "Неделя 1, Суббота")
+  
+  isCurrent   Boolean  @default(false) // Текущий день в симуляции
+  isFinished  Boolean  @default(false) // День завершен (усталость восстановлена)
+
+  timeSlots   GameTimeSlot[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([seasonId, number])
+  @@index([isCurrent])
+}
+
+model GameTimeSlot {
+  id          String   @id @default(cuid())
+  gameDayId   String
+  gameDay     GameDay  @relation(fields: [gameDayId], references: [id], onDelete: Cascade)
+  
+  order       Int      // 1 = Утро/День, 2 = Вечер (порядок внутри дня)
+  label       String?  // "15:00", "Вечерняя сессия"
+  
+  matches     Match[]  // Матчи в этот слот
+
+  @@unique([gameDayId, order])
+}
+
+// --- ОСНОВНЫЕ МОДЕЛИ ---
 
 model Country {
   id            String   @id @default(cuid())
@@ -172,6 +206,7 @@ model Season {
 
   matches       Match[]
   leagues       League[]      
+  gameDays      GameDay[]     // Связь с игровыми днями
 
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -204,7 +239,6 @@ model Team {
   baseLevel     Int      @default(1)
   capacity      Int      @default(20000) 
 
-  // Статистика
   power         Int      @default(0)
   played        Int      @default(0)
   wins          Int      @default(0)
@@ -232,9 +266,8 @@ model Team {
   awayMatches   Match[]  @relation("AwayMatches")
   setups        MatchTeamSetup[]
   
-  // Связи для рынка
-  offersMade    TransferOffer[] @relation("BuyerOffers") // Предложения, которые клуб сделал
-  loanedPlayers Player[]        @relation("LoanOrigin")  // Игроки, отданные в аренду
+  offersMade    TransferOffer[] @relation("BuyerOffers")
+  loanedPlayers Player[]        @relation("LoanOrigin")
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -263,25 +296,20 @@ model Player {
   lastName        String
   age             Int
   mainPosition    Position
-  sidePosition    Position? 
-
+  sidePosition    Position?
   power           Int
   
-  // СКРЫТЫЕ ПАРАМЕТРЫ (NEW)
-  potential       Int       @default(70) // 0-100
-  injuryProne     Int       @default(10) // 0-100
+  potential       Int       @default(70)
+  injuryProne     Int       @default(10)
   
-  // Усталость и форма
   fatigue         Int       @default(0)
   fitness         Int       @default(100)
   formIndex       Int       @default(1)
   currentForm     Int       @default(100)
 
-  // Стиль
   favoriteStyle   VflStyle?
   styleKnowledge  Int       @default(0)
 
-  // Спецухи
   specSpeed       Int @default(0)
   specHeading     Int @default(0)
   specLongPass    Int @default(0)
@@ -301,15 +329,12 @@ model Player {
   specGkReflexes  Int @default(0)
   specGkOut       Int @default(0)
 
-  price           BigInt?    
-
-  // РЫНОЧНЫЕ ПОЛЯ (NEW)
+  price           BigInt?
   isOnTransferList Boolean  @default(false)
   isOnLoanList     Boolean  @default(false)
-  transferPrice    BigInt?  // Запрашиваемая цена (опционально)
+  transferPrice    BigInt?
   
-  // АРЕНДА (NEW)
-  loanedFromTeamId String?  // ID реального владельца
+  loanedFromTeamId String?
   loanedFromTeam   Team?    @relation("LoanOrigin", fields: [loanedFromTeamId], references: [id])
   loanEndsAt       DateTime?
 
@@ -324,8 +349,6 @@ model Player {
   penaltyTakerOfSetups   MatchTeamSetup[] @relation("SetupPenalty")
 
   lineupSlots    MatchLineupSlot[]
-  
-  // Связи рынка
   offers         TransferOffer[]
   history        TransferHistory[]
 
@@ -335,7 +358,7 @@ model Player {
   @@index([teamId])
   @@index([countryId])
   @@index([mainPosition])
-  @@index([isOnTransferList]) // Для быстрого поиска на рынке
+  @@index([isOnTransferList])
 }
 
 model Trophy {
@@ -359,17 +382,20 @@ model Match {
   awayTeamId     String
   awayTeam       Team        @relation("AwayMatches", fields: [awayTeamId], references: [id], onDelete: Cascade)
   
-  tour           Int         
+  tour           Int    
   round          Int         @default(1) 
   homeScore      Int?
   awayScore      Int?
   status         MatchStatus @default(UPCOMING)
   
+  // Привязка ко времени (NEW)
+  gameTimeSlotId String?
+  gameTimeSlot   GameTimeSlot? @relation(fields: [gameTimeSlotId], references: [id])
+  
   weather        WeatherType @default(CLOUDY)
   temperature    Int         @default(20)
   attendance     Int         @default(0)
-  report         Json?       
-
+  report         Json?
   setups         MatchTeamSetup[]
 
   createdAt      DateTime @default(now())
@@ -380,7 +406,7 @@ model Match {
   @@index([homeTeamId])
   @@index([awayTeamId])
   @@index([tour])
-  @@index([round])
+  @@index([gameTimeSlotId]) // Индекс для быстрого поиска матчей слота
 }
 
 model MatchTeamSetup {
@@ -406,10 +432,9 @@ model MatchTeamSetup {
   penaltyTakerId   String?
   penaltyTaker     Player?    @relation("SetupPenalty", fields: [penaltyTakerId], references: [id])
 
-  matchConditions  Json?      
+  matchConditions  Json?
   isSubmitted      Boolean    @default(false)
   submittedAt      DateTime?
-
   lineupSlots      MatchLineupSlot[]
 
   createdAt        DateTime @default(now())
@@ -434,26 +459,19 @@ model MatchLineupSlot {
   @@index([playerId])
 }
 
-// --- НОВЫЕ МОДЕЛИ РЫНКА ---
-
-// Предложения (офферы)
 model TransferOffer {
   id          String      @id @default(cuid())
-  
   playerId    String
-  player      Player      @relation(fields: [playerId], references: [id])
-  
+  // ДОБАВЛЕНО onDelete: Cascade
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
   buyerTeamId String
-  buyerTeam   Team        @relation("BuyerOffers", fields: [buyerTeamId], references: [id])
+  // ДОБАВЛЕНО onDelete: Cascade
+  buyerTeam   Team        @relation("BuyerOffers", fields: [buyerTeamId], references: [id], onDelete: Cascade)
   
   type        ListingType
-  price       BigInt      // Сумма денег
-  
-  // Для обмена (MVP: 1 игрок в обмен)
-  swapPlayerId String?    // Игрок, которого предлагают взамен
-  
-  // Для аренды
-  loanDuration Int?       // В днях или турах
+  price       BigInt      
+  swapPlayerId String?    
+  loanDuration Int?
   
   status      OfferStatus @default(PENDING)
   createdAt   DateTime    @default(now())
@@ -463,15 +481,13 @@ model TransferOffer {
   @@index([buyerTeamId])
 }
 
-// История сделок (Аудит)
 model TransferHistory {
   id          String      @id @default(cuid())
   playerId    String
-  player      Player      @relation(fields: [playerId], references: [id])
-  
+  // ДОБАВЛЕНО onDelete: Cascade
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
   fromTeamId  String?
   toTeamId    String?
-  
   price       BigInt
   type        ListingType
   date        DateTime    @default(now())
