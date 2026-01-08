@@ -231,6 +231,7 @@ model User {
 
 model Team {
   id            String   @id @default(cuid())
+  externalId    String?  @unique // <--- ДОБАВЛЕНО ПОЛЕ
   name          String   @unique
   logo          String?
   stadium       String
@@ -292,6 +293,7 @@ model TeamApplication {
 
 model Player {
   id              String    @id @default(cuid())
+  externalId      String?   @unique // <--- ДОБАВЛЕНО ПОЛЕ
   firstName       String
   lastName        String
   age             Int
@@ -349,6 +351,7 @@ model Player {
   penaltyTakerOfSetups   MatchTeamSetup[] @relation("SetupPenalty")
 
   lineupSlots    MatchLineupSlot[]
+  
   offers         TransferOffer[]
   history        TransferHistory[]
 

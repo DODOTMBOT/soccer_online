@@ -5,12 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { 
-  ShieldCheck, Activity, Search, Bell, LogOut, Coins, Briefcase, Settings, UserPlus, CalendarClock 
+  ShieldCheck, Activity, Briefcase, Settings, UserPlus, CalendarClock, LogOut, Coins, UploadCloud 
 } from "lucide-react";
 
 const MENU_ITEMS = [
   { name: "Главная", href: "/", icon: ShieldCheck },
-  { name: "Расписание", href: "/admin/schedule", icon: CalendarClock }, // Теперь иконка импортирована корректно
+  { name: "Расписание", href: "/admin/schedule", icon: CalendarClock }, 
   { name: "Клубы", href: "/teams", icon: Activity },
   { name: "Трансферы", href: "/market", icon: Briefcase },
   { name: "Правила", href: "/rules", icon: Activity },
@@ -99,15 +99,27 @@ export function Sidebar() {
           )}
 
           {userRole === "ADMIN" && (
-            <Link
-              href="/admin"
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                pathname.startsWith("/admin") && pathname !== "/admin/schedule" ? "bg-white/20 text-white" : "text-gray-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Settings size={14} className="text-[#e30613]" />
-              Админка
-            </Link>
+            <>
+              <Link
+                href="/admin"
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                  pathname === "/admin" ? "bg-white/20 text-white" : "text-gray-300 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <Settings size={14} className="text-[#e30613]" />
+                Админка
+              </Link>
+              
+              <Link
+                href="/admin/import"
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                  pathname === "/admin/import" ? "bg-white/20 text-white" : "text-gray-300 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <UploadCloud size={14} className="text-[#e30613]" />
+                Импорт
+              </Link>
+            </>
           )}
         </nav>
       </div>
