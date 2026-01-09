@@ -68,7 +68,6 @@ const PLAYSTYLE_ICONS: Record<string, React.ReactNode> = {
 export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'pos', direction: 'asc' });
 
-  // Состояние для глобального тултипа
   const [hoveredStyle, setHoveredStyle] = useState<{
     x: number;
     y: number;
@@ -80,8 +79,8 @@ export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
   const handleMouseEnter = (e: React.MouseEvent, ps: any) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setHoveredStyle({
-      x: rect.left + rect.width / 2, // Центр иконки
-      y: rect.top,                   // Верх иконки
+      x: rect.left + rect.width / 2,
+      y: rect.top,
       title: ps.definition.name,
       desc: ps.definition.description || "Эффект не описан",
       level: ps.level
@@ -106,11 +105,15 @@ export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
       sortableItems.sort((a, b) => {
         let aValue: number | string = 0;
         let bValue: number | string = 0;
-        // ... (сортировка та же)
+        
         switch (sortConfig.key) {
           case 'name': aValue = `${a.firstName} ${a.lastName}`.toLowerCase(); bValue = `${b.firstName} ${b.lastName}`.toLowerCase(); break;
           case 'nat': aValue = (a.country?.name || '').toLowerCase(); bValue = (b.country?.name || '').toLowerCase(); break;
           case 'pos': aValue = POSITION_WEIGHTS[a.mainPosition] || 99; bValue = POSITION_WEIGHTS[b.mainPosition] || 99; break;
+          case 'age': aValue = a.age; bValue = b.age; break;
+          // --- НОВАЯ СОРТИРОВКА ДЛЯ НОМИНАЛЬНОЙ СИЛЫ ---
+          case 'basePower': aValue = a.power; bValue = b.power; break;
+          // ---------------------------------------------
           case 'power': aValue = calculateRealPower(a); bValue = calculateRealPower(b); break;
           case 'form': aValue = FITNESS_RULES.getFormPercentage(a.formIndex); bValue = FITNESS_RULES.getFormPercentage(b.formIndex); break;
           case 'cond': aValue = 100 - a.fatigue; bValue = 100 - b.fatigue; break;
@@ -118,7 +121,6 @@ export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
           case 'specs': aValue = calculateTotalPlayStyles(a); bValue = calculateTotalPlayStyles(b); break;
           case 'potential': aValue = a.potential || 0; bValue = b.potential || 0; break;
           case 'injuryProne': aValue = a.injuryProne || 0; bValue = b.injuryProne || 0; break;
-          case 'age': aValue = a.age; bValue = b.age; break;
           default: aValue = 0; bValue = 0;
         }
         if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -153,6 +155,11 @@ export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
               <th onClick={() => requestSort('nat')} className="p-1 border-r border-white/20 text-center w-10 hover:bg-[#004d00]">Нац</th>
               <th onClick={() => requestSort('pos')} className="p-1 border-r border-white/20 text-center w-12 hover:bg-[#004d00]">Поз</th>
               <th onClick={() => requestSort('age')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00]">В</th>
+              
+              {/* --- НОВЫЙ СТОЛБЕЦ: НОМИНАЛЬНАЯ СИЛА --- */}
+              <th onClick={() => requestSort('basePower')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00]" title="Номинальная Сила">С</th>
+              {/* --------------------------------------- */}
+
               <th onClick={() => requestSort('cond')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00]" title="Усталость">У</th>
               <th onClick={() => requestSort('form')} className="p-1 border-r border-white/20 text-center w-10 hover:bg-[#004d00]" title="Физ. форма">Ф</th>
               {canViewHiddenStats && (
@@ -161,7 +168,7 @@ export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
                   <th onClick={() => requestSort('injuryProne')} className="p-1 border-r border-white/20 text-center w-8 hover:bg-[#004d00] text-orange-200" title="Травматичность">Т</th>
                 </>
               )}
-              <th onClick={() => requestSort('power')} className="p-1 border-r border-white/20 text-center w-12 text-yellow-300 hover:bg-[#004d00]" title="Реальная Сила">РС</th>
+              <th onClick={() => requestSort('power')} className="p-1 border-r border-white/20 text-center w-12 text-yellow-300 hover:bg-[#004d00]" title="Реальная Сила (с учетом формы)">РС</th>
               <th onClick={() => requestSort('specs')} className="p-1 border-r border-white/20 text-left pl-4 hover:bg-[#004d00] w-48">PlayStyles</th>
               <th onClick={() => requestSort('price')} className="p-1 text-right pr-4 w-28 hover:bg-[#004d00]">Цена</th>
             </tr>
@@ -192,6 +199,11 @@ export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
                     {p.mainPosition}{p.sidePosition ? `/${p.sidePosition}` : ''}
                   </td>
                   <td className="p-1 border-r border-gray-300 text-center">{p.age}</td>
+                  
+                  {/* --- ЗНАЧЕНИЕ: НОМИНАЛЬНАЯ СИЛА --- */}
+                  <td className="p-1 border-r border-gray-300 text-center font-bold text-gray-700 bg-gray-50/50">{p.power}</td>
+                  {/* ---------------------------------- */}
+
                   <td className={`p-1 border-r border-gray-300 text-center ${p.fatigue > 15 ? 'text-red-500 font-bold' : 'text-gray-500'}`}>{p.fatigue}%</td>
                   <td className={`p-1 border-r border-gray-300 text-center font-bold ${formPercent >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>{formPercent}%</td>
                   {canViewHiddenStats && (
@@ -202,7 +214,6 @@ export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
                   )}
                   <td className="p-1 border-r border-gray-300 text-center font-black text-[#000c2d] bg-yellow-50/50">{realPower}</td>
                   
-                  {/* ОТОБРАЖЕНИЕ PLAYSTYLES */}
                   <td className="p-1 border-r border-gray-300 text-left pl-2 overflow-visible relative">
                     <div className="flex flex-wrap gap-1.5 items-center">
                       {p.playStyles && p.playStyles.length > 0 ? (
@@ -233,13 +244,12 @@ export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
         </table>
       </div>
 
-      {/* ГЛОБАЛЬНЫЙ ФИКСИРОВАННЫЙ ТУЛТИП (Рендерится вне таблицы, поверх всего) */}
       {hoveredStyle && (
         <div 
           className="fixed z-[9999] w-64 bg-[#000c2d] text-white p-4 rounded-xl shadow-2xl pointer-events-none ring-1 ring-white/10 animate-in fade-in zoom-in duration-150 origin-bottom"
           style={{ 
             left: hoveredStyle.x, 
-            top: hoveredStyle.y - 12, // Чуть выше курсора
+            top: hoveredStyle.y - 12,
             transform: 'translate(-50%, -100%)' 
           }}
         >
@@ -250,7 +260,6 @@ export function PlayerTable({ players, canViewHiddenStats }: PlayerTableProps) {
           <div className="text-[10px] font-medium leading-relaxed text-gray-300">
             {hoveredStyle.desc}
           </div>
-          {/* Стрелочка */}
           <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[#000c2d]" />
         </div>
       )}

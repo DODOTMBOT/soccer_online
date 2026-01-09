@@ -1,21 +1,34 @@
-import { Users, Home, Activity, Coins, Edit3, ClipboardList, Trophy } from "lucide-react";
+import { Users, Home, Activity, Coins, Edit3, ClipboardList } from "lucide-react";
 import Link from "next/link";
 
 interface TeamHeaderProps {
   team: any;
   upcomingMatchId?: string;
   hasSetup: boolean;
-  isManager: boolean; // <--- Новый проп
+  isManager: boolean;
 }
 
 export function TeamHeader({ team, upcomingMatchId, hasSetup, isManager }: TeamHeaderProps) {
   const leagueName = team?.league?.name || 'Вне лиги';
-  const leagueId = team?.league?.id;
-  const countryName = team?.league?.country?.name || team?.country?.name || 'Страна не указана';
+  
+  // --- ЛОГИКА: ВЫТАСКИВАЕМ ГОРОД ИЗ СТАДИОНА ---
+  let finalCityName = 'Город не указан';
+  let stadiumDisplay = team?.stadium || 'Не указан';
 
-  // Логика позиции в лиге (сокращена для краткости)
-  const getTeamPosition = () => { /* ... */ return null; };
-  const positionText = getTeamPosition();
+  // Если стадион пришел строкой (например: "Emirates Stadium (Лондон)")
+  if (typeof stadiumDisplay === 'string') {
+    // 1. Ищем текст внутри круглых скобок
+    const match = stadiumDisplay.match(/\((.*?)\)/);
+    
+    if (match && match[1]) {
+      // Нашли "Лондон" - записываем в переменную города
+      finalCityName = match[1];
+      
+      // 2. Удаляем "(Лондон)" из названия стадиона, чтобы не дублировалось
+      stadiumDisplay = stadiumDisplay.replace(/\(.*?\)/, '').trim();
+    }
+  }
+  // ----------------------------------------------
 
   return (
     <div className="flex flex-col md:flex-row items-start gap-8 bg-white p-6 border border-gray-200 shadow-sm rounded-sm font-sans text-[#000c2d]">
@@ -34,16 +47,15 @@ export function TeamHeader({ team, upcomingMatchId, hasSetup, isManager }: TeamH
           <div>
             <h1 className="text-2xl font-black uppercase italic text-[#000c2d] leading-none flex items-center gap-2">
               {team?.name || 'Загрузка...'} 
-              <span className="text-gray-400 font-medium not-italic text-lg">({countryName})</span>
+              {/* Выводим город, который вырезали из стадиона */}
+              <span className="text-gray-400 font-medium not-italic text-lg">({finalCityName})</span>
             </h1>
             <div className="flex items-center gap-1 mt-1">
-               {/* ... (логика названия лиги) ... */}
                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest italic">{leagueName}</span>
             </div>
           </div>
 
           <div className="shrink-0">
-            {/* СКРЫВАЕМ КНОПКУ, ЕСЛИ НЕ МЕНЕДЖЕР */}
             {isManager ? (
               upcomingMatchId ? (
                 <Link
@@ -71,16 +83,16 @@ export function TeamHeader({ team, upcomingMatchId, hasSetup, isManager }: TeamH
                   Матчи не запланированы
                 </div>
               )
-            ) : (
-              // Для гостей ничего не показываем или заглушку
-              null
-            )}
+            ) : null}
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-y-2 border-t border-gray-100 pt-4 max-w-md">
           <InfoRow icon={<Users size={12}/>} label="Менеджер" value={team?.manager ? team.manager.login : 'Вакантно'} isManager />
-          <InfoRow icon={<Home size={12}/>} label="Стадион" value={team?.stadium} />
+          
+          {/* Выводим очищенный стадион */}
+          <InfoRow icon={<Home size={12}/>} label="Стадион" value={stadiumDisplay} />
+          
           <InfoRow icon={<Activity size={12}/>} label="База" value={`${team?.baseLevel || 1} уровень`} />
           <InfoRow icon={<Coins size={12}/>} label="Финансы" value={`${Number(team?.finances || 0).toLocaleString()} $`} isMoney />
         </div>

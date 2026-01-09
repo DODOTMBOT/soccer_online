@@ -1,23 +1,47 @@
 import { NextResponse } from "next/server";
-import { createPlayersBulkSchema } from "@/src/server/dto/validation";
-import { PlayerService } from "@/src/server/services/player.service";
+import { z } from "zod";
+import { prisma } from "@/src/server/db";
+import { PlayStyleLevel, Position } from "@prisma/client"; // Added Position import
+
+// 1. Validation Schema
+const bulkPlayerSchema = z.array(
+  z.object({
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    age: z.number().min(15).max(50),
+    power: z.number().min(1).max(99),
+    potential: z.number().min(1).max(99).optional().default(70),
+    injuryProne: z.number().min(0).max(99).optional().default(10),
+    mainPosition: z.string(), 
+    sidePosition: z.string().nullable().optional(),
+    teamId: z.string().min(1),
+    countryId: z.string().min(1),
+    formIndex: z.number().default(0),
+    playStyles: z.array(
+      z.object({
+        definitionId: z.string(),
+        level: z.enum(["BRONZE", "SILVER", "GOLD"]),
+      })
+    ).optional().default([]),
+  })
+);
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const result = createPlayersBulkSchema.safeParse(body);
+    // 2. Validation
+    const result = bulkPlayerSchema.safeParse(body);
+    
     if (!result.success) {
       const issue = result.error.issues[0];
-      
-      // ИСПРАВЛЕНИЕ: Явное преобразование path[1] в строку, чтобы TS не ругался на symbol
-      const fieldName = issue.path[1] ? String(issue.path[1]) : "неизвестно";
-      const rowNumber = issue.path[0] ? Number(issue.path[0]) + 1 : 1;
+      const rowPath = issue.path[0];
+      const fieldPath = issue.path[1];
+      const rowNumber = typeof rowPath === 'number' ? rowPath + 1 : 1;
+      const fieldName = fieldPath ? String(fieldPath) : "unknown";
 
-      const errorMsg = `Ошибка в строке ${rowNumber} (поле ${fieldName}): ${issue.message}`;
-      
+      const errorMsg = `Error in row ${rowNumber} (field ${fieldName}): ${issue.message}`;
       console.error("❌ BULK VALIDATION ERROR:", errorMsg); 
-      console.error("Payload:", JSON.stringify(body, null, 2));
 
       return NextResponse.json(
         { error: errorMsg }, 
@@ -25,11 +49,36 @@ export async function POST(req: Request) {
       );
     }
 
-    const created = await PlayerService.createBulk(result.data);
+    const playersData = result.data;
 
-    return NextResponse.json({ success: true, count: created.length });
+    // 3. Saving to Database
+    const createdPlayers = await prisma.$transaction(
+      playersData.map((player) => {
+        const { playStyles, ...baseData } = player;
+
+        return prisma.player.create({
+          data: {
+            ...baseData,
+            // Cast string to the specific Position enum
+            mainPosition: baseData.mainPosition as Position, 
+            // Handle sidePosition: if null/empty, pass null, otherwise cast to Position
+            sidePosition: baseData.sidePosition ? (baseData.sidePosition as Position) : null,
+            
+            playStyles: {
+              create: playStyles.map((style) => ({
+                definitionId: style.definitionId,
+                level: style.level as PlayStyleLevel
+              }))
+            }
+          },
+        });
+      })
+    );
+
+    return NextResponse.json({ success: true, count: createdPlayers.length });
+
   } catch (error: any) {
     console.error("BULK_ERROR:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
