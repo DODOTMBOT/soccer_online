@@ -26,32 +26,18 @@ export const createPlayerSchema = z.object({
   firstName: emptyString,
   lastName: emptyString,
   age: numberOrString.pipe(z.number().min(15).max(45)),
-  power: numberOrString.pipe(z.number().min(1).max(99)),
+  
+  // ИЗМЕНЕНО: Лимит силы увеличен до 200 (было 99)
+  power: numberOrString.pipe(z.number().min(1).max(200)), 
+  
   mainPosition: z.nativeEnum(Position),
   sidePosition: z.nativeEnum(Position).nullable().optional(),
   teamId: emptyString,
   countryId: emptyString,
   formIndex: numberOrString.optional().default(0),
   
-  // Спецухи (опционально, по умолчанию 0)
-  specSpd: numberOrString.optional().default(0),
-  specHeading: numberOrString.optional().default(0),
-  specLong: numberOrString.optional().default(0),
-  specShortPass: numberOrString.optional().default(0),
-  specKt: numberOrString.optional().default(0), // Dribbling
-  specCombination: numberOrString.optional().default(0),
-  specTackling: numberOrString.optional().default(0),
-  specMarking: numberOrString.optional().default(0),
-  specZv: numberOrString.optional().default(0), // Shooting
-  specSt: numberOrString.optional().default(0), // FreeKicks
-  specCorners: numberOrString.optional().default(0),
-  specPenalty: numberOrString.optional().default(0),
-  specL: numberOrString.optional().default(0), // Captain
-  specKi: numberOrString.optional().default(0), // Leader
-  specPhys: numberOrString.optional().default(0),
-  specSimulation: numberOrString.optional().default(0),
-  specGkRea: numberOrString.optional().default(0),
-  specGkPos: numberOrString.optional().default(0),
+  // Новая система: массив кодов PlayStyles
+  playStyles: z.array(z.string()).max(5).optional(), 
 });
 
 // --- СХЕМА: МАССОВОЕ СОЗДАНИЕ ИГРОКОВ ---

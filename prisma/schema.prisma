@@ -122,6 +122,13 @@ enum OfferStatus {
   EXPIRED
 }
 
+// НОВЫЙ ENUM ДЛЯ ПЛЕЙСТАЙЛОВ
+enum PlayStyleLevel {
+  BRONZE
+  SILVER
+  GOLD
+}
+
 // --- НОВЫЕ МОДЕЛИ ДЛЯ КАЛЕНДАРЯ ---
 
 model GameDay {
@@ -231,7 +238,7 @@ model User {
 
 model Team {
   id            String   @id @default(cuid())
-  externalId    String?  @unique // <--- ДОБАВЛЕНО ПОЛЕ
+  externalId    String?  @unique
   name          String   @unique
   logo          String?
   stadium       String
@@ -293,7 +300,7 @@ model TeamApplication {
 
 model Player {
   id              String    @id @default(cuid())
-  externalId      String?   @unique // <--- ДОБАВЛЕНО ПОЛЕ
+  externalId      String?   @unique
   firstName       String
   lastName        String
   age             Int
@@ -312,24 +319,8 @@ model Player {
   favoriteStyle   VflStyle?
   styleKnowledge  Int       @default(0)
 
-  specSpeed       Int @default(0)
-  specHeading     Int @default(0)
-  specLongPass    Int @default(0)
-  specShortPass   Int @default(0)
-  specDribbling   Int @default(0)
-  specCombination Int @default(0)
-  specTackling    Int @default(0)
-  specMarking     Int @default(0)
-  specShooting    Int @default(0)
-  specFreeKicks   Int @default(0)
-  specCorners     Int @default(0)
-  specPenalty     Int @default(0)
-  specCaptain     Int @default(0)
-  specLeader      Int @default(0)
-  specAthleticism Int @default(0)
-  specSimulation  Int @default(0)
-  specGkReflexes  Int @default(0)
-  specGkOut       Int @default(0)
+  // --- PLAYSTYLES (НОВАЯ СИСТЕМА) ---
+  playStyles      PlayerPlayStyle[]
 
   price           BigInt?
   isOnTransferList Boolean  @default(false)
@@ -362,6 +353,42 @@ model Player {
   @@index([countryId])
   @@index([mainPosition])
   @@index([isOnTransferList])
+}
+
+// --- НОВЫЕ МОДЕЛИ PLAYSTYLES ---
+
+model PlayStyleDefinition {
+  id          String   @id @default(cuid())
+  code        String   @unique // Уникальный ключ (например, "POWER_SHOT")
+  name        String   // Название (Русское)
+  category    String   // Атака, Защита...
+  description String?  
+  
+  iconBronze  String?
+  iconSilver  String?
+  iconGold    String?
+
+  players     PlayerPlayStyle[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PlayerPlayStyle {
+  id            String              @id @default(cuid())
+  
+  playerId      String
+  player        Player              @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  
+  definitionId  String
+  definition    PlayStyleDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  
+  level         PlayStyleLevel      @default(BRONZE)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([playerId, definitionId]) // Нельзя дать один перк дважды одному игроку
 }
 
 model Trophy {

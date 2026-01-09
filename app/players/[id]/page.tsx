@@ -3,9 +3,10 @@ import { authOptions } from "@/src/server/auth";
 import { PlayerService } from "@/src/server/services/player.service";
 import { notFound } from "next/navigation";
 import { Sidebar } from "@/components/admin/Sidebar";
-import { User, Shield, Activity, Star, Zap, Lock } from "lucide-react"; // Добавь Lock
+import { User, Shield, Activity, Zap, Lock } from "lucide-react";
 import { PlayerActions } from "@/components/player/PlayerActions";
 import { prisma } from "@/src/server/db";
+import { PlayStyleLevel } from "@prisma/client";
 
 export default async function PlayerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -31,15 +32,21 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
 
   if (!player) notFound();
 
-  // Права на просмотр скрытых статов (Владелец или Админ)
   const canViewHiddenStats = player.isOwner || isAdmin;
+
+  // Карта цветов для уровней (типизированная)
+  const LEVEL_COLORS: Record<PlayStyleLevel, string> = {
+    [PlayStyleLevel.BRONZE]: "bg-orange-50 text-orange-900 border-orange-200",
+    [PlayStyleLevel.SILVER]: "bg-slate-100 text-slate-800 border-slate-300",
+    [PlayStyleLevel.GOLD]:   "bg-yellow-50 text-yellow-900 border-yellow-300"
+  };
 
   return (
     <div className="min-h-screen bg-[#f2f5f7] flex flex-col font-sans text-[#1a3151]">
       <Sidebar />
 
       <main className="flex-1 p-8 max-w-5xl mx-auto w-full">
-        {/* КАРТОЧКА ИГРОКА (Верхняя часть без изменений...) */}
+        {/* КАРТОЧКА ИГРОКА */}
         <div className="bg-white rounded-[20px] shadow-sm border border-slate-200 overflow-hidden">
           
           <div className="bg-[#1a3151] p-8 text-white flex items-start gap-6 relative overflow-hidden">
@@ -85,7 +92,6 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
             <div className="space-y-6">
               <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 border-b border-gray-100 pb-2">Физическая форма</h3>
               
-              {/* СКРЫТИЕ ДАННЫХ */}
               {canViewHiddenStats ? (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm font-bold">
@@ -128,26 +134,43 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
               )}
             </div>
 
+            {/* БЛОК PLAYSTYLES */}
             <div>
-              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 border-b border-gray-100 pb-2 mb-4">Спецвозможности</h3>
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  { k: 'specSpeed', l: 'Скорость' }, { k: 'specShooting', l: 'Удар' }, 
-                  { k: 'specDribbling', l: 'Дриблинг' }, { k: 'specTackling', l: 'Отбор' },
-                  { k: 'specLongPass', l: 'Длин.пас' }, { k: 'specHeading', l: 'Голова' }
-                ].map((spec) => {
-                  const val = player[spec.k as keyof typeof player] as number;
-                  if (!val || val === 0) return null;
-                  return (
-                    <div key={spec.k} className="bg-gray-50 border border-gray-200 p-2 flex flex-col items-center justify-center rounded-sm aspect-square">
-                      <Star size={16} className={val >= 3 ? "text-yellow-500 fill-yellow-500" : "text-gray-400"} />
-                      <span className="text-[9px] font-bold mt-1 text-center leading-none uppercase">{spec.l}</span>
-                      <span className="text-lg font-black text-[#1a3151] leading-none mt-1">Lv.{val}</span>
-                    </div>
-                  )
-                })}
+              <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">PlayStyles</h3>
+                <span className="text-[10px] font-bold bg-gray-100 px-2 py-1 rounded text-gray-500">
+                  {player.playStyles.length} / 5
+                </span>
               </div>
+
+              {player.playStyles.length === 0 ? (
+                <div className="text-center py-6 text-gray-300 text-[10px] font-black uppercase border border-dashed border-gray-200 rounded-lg">Нет активных стилей</div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  {player.playStyles.map((ps) => {
+                    const theme = LEVEL_COLORS[ps.level];
+
+                    return (
+                      <div key={ps.id} className={`flex items-center justify-between p-3 border rounded-lg ${theme}`}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-white/80 flex items-center justify-center font-black text-xs shadow-sm">
+                            {ps.definition.code[0]}
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-black uppercase leading-none">{ps.definition.name}</p>
+                            <p className="text-[9px] opacity-70 font-bold mt-0.5">{ps.definition.category}</p>
+                          </div>
+                        </div>
+                        <div className="text-[9px] font-black uppercase tracking-widest px-2 bg-white/50 rounded py-0.5">
+                          {ps.level}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
+
           </div>
 
           <div className="bg-gray-50 px-8 py-4 border-t border-gray-200 flex justify-end gap-3">

@@ -266,8 +266,63 @@ const worldCountries: CountrySeed[] = [
   { name: 'Реюньон', code: 're', confederation: 'CAF' },
 ]
 
+// ------------------------------------------------------------------
+// 2. СПИСОК PLAYSTYLES (НОВАЯ СИСТЕМА)
+// ------------------------------------------------------------------
+const PLAYSTYLES_DATA = [
+  // Атака
+  { code: 'FINESSE_SHOT', name: 'Удар на технику', category: 'ATTACK' },
+  { code: 'POWER_SHOT', name: 'Мощный удар', category: 'ATTACK' },
+  { code: 'TRIVELA', name: 'Тривела', category: 'ATTACK' },
+  // Пасы
+  { code: 'INCISIVE_PASS', name: 'Разрезающий пас', category: 'PASSING' },
+  { code: 'LONG_BALL_PASS', name: 'Длинный пас', category: 'PASSING' },
+  { code: 'FIRST_TOUCH', name: 'Первое касание', category: 'PASSING' },
+  // Защита
+  { code: 'SLIDE_TACKLE', name: 'Подкат', category: 'DEFENSE' },
+  { code: 'OFFSIDE_TRAP', name: 'Офсайдная ловушка', category: 'DEFENSE' },
+  { code: 'MAN_MARKING', name: 'Опека', category: 'DEFENSE' },
+  // Физика
+  { code: 'ATHLETICISM', name: 'Атлетизм', category: 'PHYSICAL' },
+  // Вратарские
+  { code: 'GK_FEET', name: 'Игра ногами', category: 'GOALKEEPER' },
+  { code: 'GK_CROSSES', name: 'Игра на выходе', category: 'GOALKEEPER' },
+  { code: 'GK_1V1', name: 'Игра 1 в 1', category: 'GOALKEEPER' },
+  { code: 'GK_PENALTY', name: 'Отражение пенальти', category: 'GOALKEEPER' },
+  // Ментальные
+  { code: 'LEADER', name: 'Лидер', category: 'MENTAL' },
+  { code: 'ICON', name: 'Кумир', category: 'MENTAL' },
+  { code: 'CAPTAIN', name: 'Капитан', category: 'MENTAL' },
+  // Стилевые
+  { code: 'INTENSIVE_SPEED', name: 'Скорость (Интенсив)', category: 'STYLE' },
+  { code: 'TRICKSTER', name: 'Трюкач (Joga)', category: 'STYLE' },
+  { code: 'TIKI_TAKA', name: 'Тики Така', category: 'STYLE' },
+  { code: 'PRESS_TRIGGER', name: 'Триггер (Прес)', category: 'STYLE' },
+  { code: 'DISCIPLINE', name: 'Дисциплина (Автобус)', category: 'STYLE' },
+  { code: 'COMPACTNESS', name: 'Компактность (Чоло)', category: 'STYLE' },
+];
+
+async function seedPlayStyles() {
+  console.log('✨ Seeding PlayStyles...');
+  for (const ps of PLAYSTYLES_DATA) {
+    await prisma.playStyleDefinition.upsert({
+      where: { code: ps.code },
+      update: { name: ps.name, category: ps.category },
+      create: { 
+        code: ps.code, 
+        name: ps.name, 
+        category: ps.category,
+        description: "Описание эффекта будет добавлено позже."
+      }
+    });
+  }
+}
+
 async function main() {
   console.log('🌍 Начинаем посев данных...')
+
+  // 0. Заполняем справочник PlayStyles (НОВАЯ СИСТЕМА)
+  await seedPlayStyles();
 
   // 1. Создаем или получаем активный сезон
   const season = await prisma.season.upsert({
