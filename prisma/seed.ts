@@ -321,78 +321,11 @@ async function seedPlayStyles() {
 async function main() {
   console.log('🌍 Начинаем посев данных...')
 
-  // 0. Заполняем справочник PlayStyles (НОВАЯ СИСТЕМА)
+  // 1. Заполняем справочник PlayStyles (ЭТО НУЖНО ОСТАВИТЬ)
   await seedPlayStyles();
 
-  // 1. Создаем или получаем активный сезон
-  const season = await prisma.season.upsert({
-    where: { year: 2025 },
-    update: {},
-    create: { year: 2025, status: 'ACTIVE' }
-  })
-
-  // 2. Функция для создания стран и лиг
-  const seedCountryWithClubs = async (
-    countryName: string, 
-    leagueName: string,
-    clubs: ClubSeed[]
-  ) => {
-    const countryInfo = worldCountries.find(c => c.name === countryName)
-    if (!countryInfo) {
-      console.log(`⚠️ Ошибка: Страна ${countryName} не найдена!`)
-      return
-    }
-
-    // Создаем/Обновляем страну
-    const country = await prisma.country.upsert({
-      where: { name: countryName },
-      update: { 
-        flag: `https://flagcdn.com/w320/${countryInfo.code}.png`,
-        confederation: countryInfo.confederation
-      },
-      create: {
-        name: countryName,
-        flag: `https://flagcdn.com/w320/${countryInfo.code}.png`,
-        confederation: countryInfo.confederation
-      }
-    })
-
-    // Создаем Лигу, привязанную к сезону (UncheckedCreate формат)
-    let league = await prisma.league.findFirst({
-      where: { countryId: country.id, seasonId: season.id, level: 1 }
-    })
-
-    if (!league) {
-      league = await prisma.league.create({
-        data: {
-          name: leagueName,
-          level: 1,
-          teamsCount: clubs.length,
-          countryId: country.id, // ID напрямую
-          seasonId: season.id    // ID напрямую
-        }
-      })
-      console.log(`   🏆 Создана лига: ${leagueName} (${countryName})`)
-    }
-
-    // Создаем Клубы
-    for (const club of clubs) {
-      await prisma.team.upsert({
-        where: { name: club.name },
-        update: { logo: club.logo },
-        create: {
-          name: club.name,
-          stadium: club.stadium,
-          logo: club.logo,
-          baseLevel: 1,
-          countryId: country.id,
-          leagueId: league.id
-        }
-      })
-    }
-  }
-
-  // 3. Загружаем все страны из списка
+  // 2. Загружаем все страны из списка (ЭТО НУЖНО ОСТАВИТЬ, чтобы работал импорт)
+  console.log('🏳️  Создание стран...')
   for (const c of worldCountries) {
     await prisma.country.upsert({
       where: { name: c.name },
@@ -408,43 +341,10 @@ async function main() {
     })
   }
 
-  // 4. ЗАГРУЗКА КЛУБОВ ПО СТРАНАМ
-  await seedCountryWithClubs('Англия', 'Premier League', [
-    { name: 'Арсенал', city: 'Лондон', stadium: 'Эмирейтс', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/53/Arsenal_FC.svg/1200px-Arsenal_FC.svg.png' },
-    { name: 'Манчестер Сити', city: 'Манчестер', stadium: 'Этихад', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/e/eb/Manchester_City_FC_badge.svg/1200px-Manchester_City_FC_badge.svg.png' },
-    { name: 'Ливерпуль', city: 'Ливерпуль', stadium: 'Энфилд', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/0/0c/Liverpool_FC.svg/1200px-Liverpool_FC.svg.png' },
-    { name: 'Челси', city: 'Лондон', stadium: 'Стэмфорд Бридж', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/c/cc/Chelsea_FC.svg/1200px-Chelsea_FC.svg.png' },
-    { name: 'Манчестер Юнайтед', city: 'Манчестер', stadium: 'Олд Траффорд', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/7/7a/Manchester_United_FC_crest.svg/1200px-Manchester_United_FC_crest.svg.png' },
-    { name: 'Тоттенхэм', city: 'Лондон', stadium: 'Тоттенхэм Хотспур', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/b/b4/Tottenham_Hotspur.svg/1200px-Tottenham_Hotspur.svg.png' },
-    { name: 'Астон Вилла', city: 'Бирмингем', stadium: 'Вилла Парк', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/f/f9/Aston_Villa_FC_crest_%282016%29.svg/1200px-Aston_Villa_FC_crest_%282016%29.svg.png' },
-    { name: 'Ньюкасл', city: 'Ньюкасл', stadium: 'Сент-Джеймс Парк', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Newcastle_United_Logo.svg/1200px-Newcastle_United_Logo.svg.png' },
-    { name: 'Вест Хэм', city: 'Лондон', stadium: 'Лондон Стэдиум', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/c/c2/West_Ham_United_FC_logo.svg/1200px-West_Ham_United_FC_logo.svg.png' },
-    { name: 'Эвертон', city: 'Ливерпуль', stadium: 'Гудисон Парк', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/7/7c/Everton_FC_logo.svg/1200px-Everton_FC_logo.svg.png' },
-    { name: 'Брайтон', city: 'Брайтон', stadium: 'Амекс', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/f/fd/Brighton_%26_Hove_Albion_logo.svg/1200px-Brighton_%26_Hove_Albion_logo.svg.png' },
-    { name: 'Брентфорд', city: 'Лондон', stadium: 'Gtech Community', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/2/2a/Brentford_FC_crest.svg/1200px-Brentford_FC_crest.svg.png' },
-    { name: 'Вулверхэмптон', city: 'Вулвергемптон', stadium: 'Молинью', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/f/fc/Wolverhampton_Wanderers.svg/1200px-Wolverhampton_Wanderers.svg.png' },
-    { name: 'Кристал Пэлас', city: 'Лондон', stadium: 'Селхерст Парк', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/a/a2/Crystal_Palace_FC_logo_%282022%29.svg/1200px-Crystal_Palace_FC_logo_%282022%29.svg.png' },
-    { name: 'Борнмут', city: 'Борнмут', stadium: 'Виталити', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/e/e5/AFC_Bournemouth_%282013%29.svg/1200px-AFC_Bournemouth_%282013%29.svg.png' },
-    { name: 'Бернли', city: 'Бернли', stadium: 'Терф Мур', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/6/62/Burnley_FC_Logo.svg/1200px-Burnley_FC_Logo.svg.png' },
-    { name: 'Фулхэм', city: 'Лондон', stadium: 'Крейвен Коттедж', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/e/eb/Fulham_FC_%28shield%29.svg/1200px-Fulham_FC_%28shield%29.svg.png' },
-  ])
-
-  await seedCountryWithClubs('Испания', 'La Liga', [
-    { name: 'Реал Мадрид', city: 'Мадрид', stadium: 'Сантьяго Бернабеу', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/1200px-Real_Madrid_CF.svg.png' },
-    { name: 'Барселона', city: 'Барселона', stadium: 'Камп Ноу', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/4/47/FC_Barcelona_%28crest%29.svg/1200px-FC_Barcelona_%28crest%29.svg.png' },
-    { name: 'Атлетико Мадрид', city: 'Мадрид', stadium: 'Цивитас Метрополитано', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/f/f4/Atletico_Madrid_2017_logo.svg/1200px-Atletico_Madrid_2017_logo.svg.png' },
-  ])
-
-  await seedCountryWithClubs('Россия', 'RPL', [
-    { name: 'Зенит', city: 'Санкт-Петербург', stadium: 'Газпром Арена', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/FC_Zenit_Saint_Petersburg_logo.svg/1200px-FC_Zenit_Saint_Petersburg_logo.svg.png' },
-    { name: 'Спартак', city: 'Москва', stadium: 'Лукойл Арена', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/8/86/FC_Spartak_Moscow_logo.svg/1200px-FC_Spartak_Moscow_logo.svg.png' },
-  ])
-
-  await seedCountryWithClubs('Сальвадор', 'Primera Division', [
-    { name: 'Марте', city: 'Сан-Сальвадор', stadium: 'Эстадио Кускатлан', capacity: 0, finances: 0, logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/2/2f/Atletico_Marte.png/1200px-Atletico_Marte.png' }
-  ])
-
-  console.log('\n🏁 Посев успешно завершен!')
+  // --- ВЕСЬ БЛОК С КЛУБАМИ НИЖЕ МЫ УДАЛИЛИ ---
+  // Больше никаких seedCountryWithClubs('Англия'...)
+  
+  console.log('\n🏁 База данных инициализирована (Страны + Стили). Клубов нет.')
 }
 
 main()

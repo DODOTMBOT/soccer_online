@@ -3,16 +3,23 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/server/auth";
 import { NextResponse } from "next/server";
 
-// --- ПОЛУЧЕНИЕ СПИСКА СТРАН (ТОЛЬКО С КОМАНДАМИ) ---
-export async function GET() {
+// --- ПОЛУЧЕНИЕ СПИСКА СТРАН ---
+export async function GET(req: Request) {
   try {
+    // Получаем параметры из URL
+    const { searchParams } = new URL(req.url);
+    const includeEmpty = searchParams.get("includeEmpty") === "true";
+
+    // Если includeEmpty=true, фильтр пустой (берем все страны).
+    // Иначе берем только те, где есть команды (старое поведение для списков).
+    const whereClause = includeEmpty ? {} : {
+      teams: {
+        some: {} 
+      }
+    };
+
     const countries = await prisma.country.findMany({
-      where: {
-        // Фильтр: возвращаем страну только если в ней есть хотя бы одна команда
-        teams: {
-          some: {} 
-        }
-      },
+      where: whereClause,
       include: { 
         _count: { 
           select: { 
@@ -33,7 +40,7 @@ export async function GET() {
   }
 }
 
-// --- СОЗДАНИЕ НОВОЙ СТРАНЫ ---
+// --- СОЗДАНИЕ НОВОЙ СТРАНЫ (Оставляем без изменений) ---
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);

@@ -3,237 +3,284 @@
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/admin/Sidebar";
 import { 
-  Plus, Loader2, Trophy, Calendar, History, 
-  LayoutTemplate, Users, PlayCircle, Trash2 
+  Play, FastForward, Loader2, Trophy, List, Calendar, Trash2, Archive, CheckCircle
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function SeasonsPage() {
   const [seasons, setSeasons] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const router = useRouter();
 
   const fetchSeasons = async () => {
     try {
       const res = await fetch("/api/admin/seasons");
-      if (res.ok) {
-        const data = await res.json();
-        setSeasons(data);
-      }
+      if (res.ok) setSeasons(await res.json());
     } catch (e) {
-      console.error(e);
+      console.error("Failed to fetch seasons", e);
     }
   };
 
   useEffect(() => { fetchSeasons(); }, []);
 
-  const createSeason = async () => {
-    const input = prompt("Введите номер/год нового сезона (например: 2027):");
-    if (input === null || input.trim() === "") return;
+  const activeSeason = seasons.find(s => s.status === 'ACTIVE');
 
-    const year = parseInt(input);
-    if (isNaN(year)) {
-      alert("Ошибка: Вы должны ввести число!");
-      return;
-    }
+  // --- ЛОГИКА АКТИВНОГО СЕЗОНА ---
 
-    if (!confirm(`Вы уверены? Будет создан Сезон ${year}. Текущий активный сезон будет завершен.`)) return;
+  const handleStartSeason = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/seasons/transition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "CREATE_NEXT" })
+      });
+      if (res.ok) {
+        fetchSeasons();
+      }
+    } finally { setLoading(false); }
+  };
+
+  const handleGenerateCalendar = async () => {
+    if (!activeSeason) return;
+    if (!confirm("Сгенерировать календарь для ВСЕХ лиг активного сезона?")) return;
     
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/seasons", { 
+      const res = await fetch("/api/admin/seasons/generate-calendar", {
         method: "POST",
-        body: JSON.stringify({ year }),
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId: activeSeason.id })
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      await fetchSeasons();
-    } catch (e: any) {
-      alert(`Ошибка: ${e.message}`);
+      const data = await res.json();
+      if(res.ok) alert(data.message);
+      else alert(data.error);
+    } finally { setLoading(false); }
+  };
+
+  const handleRotate = async () => {
+    if (!activeSeason) return;
+    if (!confirm(`ЗАВЕРШИТЬ СЕЗОН ${activeSeason.year}?\n\nКоманды будут перемещены (2 вверх, 2 вниз).\nСтатистика обнулится.`)) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/seasons/transition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "FINISH_AND_ROTATE", seasonId: activeSeason.id })
+      });
+      if (res.ok) {
+        alert("Сезон завершен! Начат новый.");
+        fetchSeasons();
+      } else {
+        alert("Ошибка ротации");
+      }
+    } finally { setLoading(false); }
+  };
+
+  // --- ЛОГИКА УДАЛЕНИЯ ---
+
+  const handleDelete = async (id: string, year: number) => {
+    const isConfirmed = confirm(
+      `Вы точно хотите удалить сезон ${year}?\n\n` + 
+      `ВАЖНО: Команды НЕ удалятся, они просто станут "свободными".\n` +
+      `Матчи и таблицы этого сезона будут удалены навсегда.`
+    );
+    
+    if (!isConfirmed) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/seasons/${id}`, {
+        method: "DELETE"
+      });
+      
+      if (res.ok) {
+        fetchSeasons();
+      } else {
+        alert("Ошибка при удалении сезона");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка сети");
     } finally {
       setLoading(false);
     }
   };
 
-  const deleteSeason = async (id: string, year: number) => {
-    if (!confirm(`⚠️ ВНИМАНИЕ! Вы собираетесь удалить Сезон ${year}.\n\nЭто БЕЗВОЗВРАТНО удалит:\n- Все лиги этого сезона\n- Все команды в этих лигах\n- Всех игроков и матчи\n\nВы уверены?`)) return;
-
-    setDeletingId(id);
-    try {
-      const res = await fetch(`/api/admin/seasons/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Ошибка удаления");
-      
-      // Удаляем из локального стейта, чтобы не ждать фетча
-      setSeasons(prev => prev.filter(s => s.id !== id));
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const runSetupStep = async (seasonId: string, endpoint: string, actionKey: string) => {
-    setActionLoading(`${seasonId}-${actionKey}`);
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        body: JSON.stringify({ seasonId }),
-        headers: { "Content-Type": "application/json" }
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      alert(`✅ Успешно! \n${JSON.stringify(data.message || data.success)}`);
-    } catch (e: any) {
-      alert(`❌ Ошибка: ${e.message}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#f2f5f7] flex flex-col font-sans">
+    // ИСПРАВЛЕНИЕ ЗДЕСЬ: добавлен класс flex-col
+    <div className="min-h-screen bg-[#f2f5f7] flex flex-col font-sans text-[#1a3151]">
       <Sidebar />
+      <div className="flex-1 p-8 overflow-y-auto">
+        
+        <h1 className="text-3xl font-black uppercase italic mb-8 flex items-center gap-3">
+          <Trophy className="text-[#e30613]" size={32} />
+          Управление сезонами
+        </h1>
 
-      <div className="bg-white border-b border-gray-200 px-8 py-4 shrink-0">
-        <div className="max-w-[1200px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-gray-50 border border-gray-200 flex items-center justify-center rounded-sm">
-                <Calendar size={20} className="text-[#1a3151]" />
+        {/* 1. БЛОК АКТИВНОГО СЕЗОНА */}
+        <section className="mb-12">
+          {!activeSeason ? (
+            <div className="bg-white p-10 rounded shadow text-center border-t-4 border-emerald-500">
+              <h2 className="text-2xl font-bold mb-2">Нет активного сезона</h2>
+              <p className="text-gray-500 mb-6">Создайте сезон, чтобы начать соревнования.</p>
+              <button 
+                onClick={handleStartSeason} 
+                disabled={loading}
+                className="bg-emerald-600 text-white px-8 py-4 rounded font-bold uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 mx-auto"
+              >
+                {loading ? <Loader2 className="animate-spin"/> : <Play size={20} fill="currentColor" />}
+                Начать сезон
+              </button>
             </div>
-            <div>
-              <h1 className="text-xl font-black uppercase tracking-tighter italic text-[#000c2d]">
-                Управление <span className="text-[#e30613]">сезонами</span>
-              </h1>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                Глобальная хронология лиги
-              </p>
-            </div>
-          </div>
-          
-          <button 
-            onClick={createSeason}
-            disabled={loading}
-            className="bg-[#000c2d] text-white px-6 py-3 rounded-sm text-[10px] font-black uppercase tracking-widest hover:bg-[#e30613] transition-all flex items-center gap-2 shadow-md disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />}
-            Запустить новый сезон
-          </button>
-        </div>
-      </div>
-
-      <main className="flex-1 overflow-y-auto custom-scrollbar p-8">
-        <div className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          
-          {seasons.map((s) => (
-            <div 
-              key={s.id} 
-              className={`bg-white p-6 border rounded-sm shadow-sm relative overflow-hidden group transition-all hover:shadow-lg flex flex-col ${
-                s.status === 'ACTIVE' ? 'border-[#e30613] border-b-4' : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="relative z-10 flex-1">
-                <div className="flex justify-between items-start mb-6">
-                  <div className={`p-2.5 rounded-sm ${s.status === 'ACTIVE' ? 'bg-[#e30613] text-white' : 'bg-gray-100 text-gray-400'}`}>
-                    <Trophy size={18} />
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    {s.status === 'ACTIVE' ? (
-                        <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1 rounded-sm border border-emerald-100">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Active</span>
-                        </div>
-                    ) : (
-                        <div className="bg-gray-50 px-3 py-1 rounded-sm border border-gray-100">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Archive</span>
-                        </div>
-                    )}
-                    
-                    {/* КНОПКА УДАЛЕНИЯ */}
-                    <button 
-                      onClick={() => deleteSeason(s.id, s.year)}
-                      disabled={deletingId === s.id}
-                      className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-sm transition-all"
-                      title="Удалить сезон"
-                    >
-                      {deletingId === s.id ? <Loader2 size={14} className="animate-spin text-red-600"/> : <Trash2 size={14} />}
-                    </button>
-                  </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Карточка текущего сезона */}
+              <div className="bg-[#1a3151] text-white p-6 rounded shadow-lg relative overflow-hidden flex justify-between items-center">
+                <div className="relative z-10">
+                  <p className="text-xs font-black uppercase tracking-[0.3em] text-[#e30613] mb-1">Active Season</p>
+                  <h2 className="text-4xl font-black italic tracking-tighter">СЕЗОН {activeSeason.year}</h2>
                 </div>
+                
+                <button 
+                   onClick={() => handleDelete(activeSeason.id, activeSeason.year)}
+                   className="relative z-20 bg-red-600/20 hover:bg-red-600 text-white p-2 rounded transition-colors"
+                   title="Удалить текущий сезон"
+                >
+                  <Trash2 size={20} />
+                </button>
 
-                <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
-                        Официальный сезон
-                    </span>
-                    <h3 className="text-4xl font-black italic tracking-tighter text-[#000c2d] leading-none">
-                        {s.year}
-                    </h3>
+                <div className="absolute right-0 bottom-0 text-[100px] font-black italic text-white/5 leading-none -mb-4 -mr-4">
+                  {activeSeason.year}
                 </div>
-
-                {/* ПАНЕЛЬ НАСТРОЙКИ (ТОЛЬКО ДЛЯ АКТИВНОГО) */}
-                {s.status === 'ACTIVE' && (
-                    <div className="mt-8 pt-6 border-t border-gray-100">
-                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-3">
-                            Настройка старта
-                        </p>
-                        
-                        <div className="space-y-2">
-                            <button 
-                                onClick={() => runSetupStep(s.id, "/api/admin/seasons/init-leagues", "init")}
-                                disabled={!!actionLoading}
-                                className="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-[#000c2d] px-3 py-2 rounded-sm border border-gray-200 text-xs font-bold transition-all disabled:opacity-50"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <LayoutTemplate size={14} className="text-blue-600"/>
-                                    <span>1. Создать Дивизионы</span>
-                                </div>
-                                {actionLoading === `${s.id}-init` && <Loader2 size={12} className="animate-spin"/>}
-                            </button>
-
-                            <button 
-                                onClick={() => runSetupStep(s.id, "/api/admin/seasons/generate-teams", "teams")}
-                                disabled={!!actionLoading}
-                                className="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-[#000c2d] px-3 py-2 rounded-sm border border-gray-200 text-xs font-bold transition-all disabled:opacity-50"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <Users size={14} className="text-purple-600"/>
-                                    <span>2. Заполнить Команды</span>
-                                </div>
-                                {actionLoading === `${s.id}-teams` && <Loader2 size={12} className="animate-spin"/>}
-                            </button>
-
-                            <button 
-                                onClick={() => runSetupStep(s.id, "/api/admin/seasons/generate-calendar", "calendar")}
-                                disabled={!!actionLoading}
-                                className="w-full flex items-center justify-between bg-[#000c2d] hover:bg-[#e30613] text-white px-3 py-2 rounded-sm text-xs font-bold transition-all disabled:opacity-50 shadow-sm"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <PlayCircle size={14}/>
-                                    <span>3. Сгенерировать Календарь</span>
-                                </div>
-                                {actionLoading === `${s.id}-calendar` && <Loader2 size={12} className="animate-spin"/>}
-                            </button>
-                        </div>
-                    </div>
-                )}
               </div>
 
-              <div className="absolute -right-4 -bottom-6 text-[#f2f5f7] font-black text-[120px] italic opacity-100 select-none group-hover:text-gray-100 transition-colors pointer-events-none -z-0">
-                {s.year % 100}
-              </div>
-            </div>
-          ))}
+              {/* Панель действий */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Шаг 2 */}
+                <div className="bg-white p-5 border border-gray-200 rounded shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">ШАГ 2</span>
+                    <h3 className="font-bold">Состав Лиг</h3>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-4 h-10">
+                    Добавьте или уберите команды из лиг вручную перед стартом.
+                  </p>
+                  <button 
+                    onClick={() => router.push('/admin/countries/list')}
+                    className="w-full border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-bold hover:bg-gray-50 flex items-center justify-center gap-2"
+                  >
+                    <List size={16}/> Редактировать лиги
+                  </button>
+                </div>
 
-          {seasons.length === 0 && !loading && (
-            <div className="col-span-full py-20 text-center bg-white border border-dashed border-gray-300 rounded-sm">
-                <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">
-                    История сезонов пуста
-                </p>
+                {/* Шаг 3 */}
+                <div className="bg-white p-5 border border-gray-200 rounded shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">ШАГ 3</span>
+                    <h3 className="font-bold">Календарь</h3>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-4 h-10">
+                    Сгенерировать матчи для всех дивизионов.
+                  </p>
+                  <button 
+                    onClick={handleGenerateCalendar}
+                    disabled={loading}
+                    className="w-full bg-[#1a3151] text-white px-4 py-2 rounded text-sm font-bold hover:bg-[#233b5d] flex items-center justify-center gap-2"
+                  >
+                    {loading ? <Loader2 className="animate-spin" size={16}/> : <Calendar size={16}/>}
+                    Генерация матчей
+                  </button>
+                </div>
+
+                {/* Шаг 4 */}
+                <div className="bg-white p-5 border-l-4 border-[#e30613] rounded shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded">ФИНАЛ</span>
+                    <h3 className="font-bold text-[#e30613]">Завершение</h3>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-4 h-10">
+                    Закончить сезон, провести ротацию и начать новый год.
+                  </p>
+                  <button 
+                    onClick={handleRotate}
+                    disabled={loading}
+                    className="w-full bg-[#e30613] text-white px-4 py-2 rounded text-sm font-bold hover:bg-red-700 flex items-center justify-center gap-2"
+                  >
+                    {loading ? <Loader2 className="animate-spin" size={16}/> : <FastForward size={16}/>}
+                    Завершить сезон
+                  </button>
+                </div>
+              </div>
             </div>
           )}
-        </div>
-      </main>
+        </section>
+
+        {/* 2. БЛОК АРХИВА / ИСТОРИИ */}
+        <section>
+          <h2 className="text-xl font-bold flex items-center gap-2 mb-4 text-gray-400 uppercase tracking-wider">
+            <Archive size={20} />
+            Архив сезонов
+          </h2>
+
+          <div className="bg-white rounded shadow overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 uppercase font-bold text-xs">
+                <tr>
+                  <th className="px-6 py-4">Сезон</th>
+                  <th className="px-6 py-4">Статус</th>
+                  <th className="px-6 py-4">Дата создания</th>
+                  <th className="px-6 py-4 text-right">Действия</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {seasons.map((season) => (
+                  <tr key={season.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 font-bold text-lg">
+                      {season.year}
+                    </td>
+                    <td className="px-6 py-4">
+                      {season.status === 'ACTIVE' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse"></span>
+                          Активен
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                          <CheckCircle size={10} />
+                          Завершен
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-gray-500">
+                      {new Date(season.createdAt).toLocaleString('ru-RU')}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => handleDelete(season.id, season.year)}
+                        className="text-gray-400 hover:text-red-600 transition-colors p-2 rounded hover:bg-red-50"
+                        title="Удалить сезон (Команды останутся)"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                
+                {seasons.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-8 text-center text-gray-400 italic">
+                      История пуста
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
     </div>
   );
 }

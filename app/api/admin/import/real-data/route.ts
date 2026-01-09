@@ -1,9 +1,9 @@
 import { prisma } from "@/src/server/db";
 import { NextResponse } from "next/server";
-// Убедись, что этот файл (import-helpers) тоже создан (см. шаг 2)
+// Убедитесь, что путь к хелперам верный
 import { generateHiddenStats, mapPosition } from "@/src/server/utils/import-helpers"; 
 
-// Увеличиваем лимит времени выполнения для Vercel/Node (если поддерживается)
+// Увеличиваем лимит времени выполнения (если поддерживается платформой)
 export const maxDuration = 60; 
 
 export async function POST(req: Request) {
@@ -22,6 +22,7 @@ export async function POST(req: Request) {
 
     for (const teamData of data) {
       // 1. Страна
+      // Ищем или создаем страну
       let country = await prisma.country.findFirst({ where: { name: teamData.country } });
       if (!country) {
         country = await prisma.country.create({
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
       }
 
       // 2. Лига
+      // Пытаемся найти лигу, чтобы привязать команду (если нет - команда будет "свободной")
       const league = await prisma.league.findFirst({ 
         where: { name: teamData.league, countryId: country.id } 
       });
@@ -46,11 +48,11 @@ export async function POST(req: Request) {
         stadium: teamData.stadium || "Generic Stadium",
         finances: BigInt(teamData.finances || 10000000),
         countryId: country.id,
-        leagueId: league?.id || null,
+        leagueId: league?.id || null, // Если лига не найдена, поле будет null
         baseLevel: 1,
       };
 
-      // Ищем по externalId (если есть) или по имени
+      // Ищем команду по externalId (если есть в JSON) или по имени
       const teamWhere = teamData.externalId 
         ? { externalId: teamData.externalId } 
         : { name: teamData.name };
@@ -70,6 +72,8 @@ export async function POST(req: Request) {
         for (const p of teamData.players) {
           const seedKey = p.externalId || `${p.firstName}_${p.lastName}_${p.age}`;
           const hidden = generateHiddenStats(seedKey, p.power);
+          
+          // Преобразуем строковые позиции (например "GK") в Enum
           const mainPos = mapPosition(p.position);
           const sidePos = p.sidePosition ? mapPosition(p.sidePosition) : null;
 
@@ -86,25 +90,7 @@ export async function POST(req: Request) {
             potential: hidden.potential,
             injuryProne: hidden.injuryProne,
             formIndex: hidden.formIndex,
-            // Спецухи
-            specSpeed: p.specs?.specSpd || 0,
-            specHeading: p.specs?.specHeading || 0,
-            specLongPass: p.specs?.specLong || 0,
-            specShortPass: p.specs?.specShortPass || 0,
-            specDribbling: p.specs?.specKt || 0,
-            specCombination: p.specs?.specKr || 0,
-            specTackling: p.specs?.specTackling || 0,
-            specMarking: p.specs?.specMarking || 0,
-            specShooting: p.specs?.specZv || 0,
-            specFreeKicks: p.specs?.specSt || 0,
-            specCorners: p.specs?.specCorners || 0,
-            specPenalty: p.specs?.specPenalty || 0,
-            specCaptain: p.specs?.specL || 0,
-            specLeader: p.specs?.specKi || 0,
-            specAthleticism: p.specs?.specPhys || 0,
-            specSimulation: p.specs?.specSimulation || 0,
-            specGkReflexes: p.specs?.specGkRea || 0,
-            specGkOut: p.specs?.specGkPos || 0,
+            // УДАЛЕНЫ старые поля spec..., так как их нет в Prisma Schema
           };
 
           if (p.externalId) {
@@ -114,7 +100,7 @@ export async function POST(req: Request) {
               create: { ...playerPayload, externalId: p.externalId }
             });
           } else {
-            // Без externalId просто создаем (осторожно с дублями)
+            // Без externalId просто создаем
             await prisma.player.create({
                data: { ...playerPayload, externalId: null }
             });

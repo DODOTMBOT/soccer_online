@@ -31,9 +31,10 @@ export default function NewLeaguePage() {
     const loadData = async () => {
       try {
         const [cRes, lRes, sRes] = await Promise.all([
-          fetch('/api/admin/countries'),
-          fetch('/api/admin/leagues'),
-          fetch('/api/admin/seasons')
+          // ВАЖНО: Добавлен параметр ?includeEmpty=true и { cache: 'no-store' }
+          fetch('/api/admin/countries?includeEmpty=true', { cache: 'no-store' }),
+          fetch('/api/admin/leagues', { cache: 'no-store' }),
+          fetch('/api/admin/seasons', { cache: 'no-store' })
         ]);
         
         if (cRes.ok) setCountries(await cRes.json());
@@ -87,7 +88,7 @@ export default function NewLeaguePage() {
       }
 
       alert("Лига успешно создана");
-      router.push("/admin/countries");
+      router.push("/admin/countries/list");
       router.refresh();
     } catch (err: any) {
       setError(err.message);
@@ -111,7 +112,7 @@ export default function NewLeaguePage() {
       <div className="bg-white border-b border-gray-200 px-8 py-4 shrink-0">
         <div className="max-w-[1200px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/admin/countries" className="text-gray-400 hover:text-[#000c2d]">
+            <Link href="/admin/countries/list" className="text-gray-400 hover:text-[#000c2d]">
               <ArrowLeft size={18} />
             </Link>
             <h1 className="text-xl font-black uppercase italic text-[#000c2d]">
@@ -145,7 +146,11 @@ export default function NewLeaguePage() {
                     onChange={e => setForm({...form, countryId: e.target.value})}
                   >
                     <option value="">Выберите страну...</option>
-                    {countries.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {countries.length > 0 ? (
+                      countries.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
+                    ) : (
+                      <option disabled>Нет доступных стран</option>
+                    )}
                   </select>
                 </div>
 

@@ -261,7 +261,7 @@ model Team {
   country       Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
 
   leagueId      String?
-  league        League?  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league        League?  @relation(fields: [leagueId], references: [id], onDelete: SetNull)
 
   managerId     String?  @unique
   manager       User?    @relation("TeamManager", fields: [managerId], references: [id])
