@@ -24,8 +24,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru" className="scroll-smooth">
-      <body className={`${inter.variable} antialiased selection:bg-[#e30613] selection:text-white`}>
-        <NextAuthProvider>
+{/* Заменили цвет выделения на emerald-600 и фон страницы на gray-50 для целостности */}
+<body className={`${inter.variable} antialiased bg-gray-50 selection:bg-emerald-600 selection:text-white`}>
+          <NextAuthProvider>
           <Toaster 
             position="top-center"
             toastOptions={{
