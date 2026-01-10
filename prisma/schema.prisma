@@ -522,3 +522,15 @@ model TransferHistory {
   type        ListingType
   date        DateTime    @default(now())
 }
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  entityType  String   // "PLAYER", "TEAM", etc.
+  entityId    String
+  action      String   // "UPDATE", "TRANSFER", "EDIT_STYLES"
+  actorId     String
+  changes     Json     // { before: ..., after: ... }
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+}

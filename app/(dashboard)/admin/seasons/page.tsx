@@ -1,11 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Sidebar } from "@/components/admin/Sidebar";
 import { 
-  Play, FastForward, Loader2, Trophy, List, Calendar, Trash2, Archive, CheckCircle
+  Play, FastForward, Loader2, Trophy, List, Calendar, Trash2, Archive, CheckCircle, AlertTriangle
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+// --- НАСТРОЙКИ ДИЗАЙНА ---
+const THEME = {
+  colors: {
+    bgMain: "bg-gray-50",
+    primary: "bg-emerald-600",
+    primaryText: "text-emerald-600",
+    cardBg: "bg-white",
+    textMain: "text-gray-900",
+    textMuted: "text-gray-500",
+  }
+};
 
 export default function SeasonsPage() {
   const [seasons, setSeasons] = useState<any[]>([]);
@@ -109,107 +120,125 @@ export default function SeasonsPage() {
   };
 
   return (
-    // ИСПРАВЛЕНИЕ ЗДЕСЬ: добавлен класс flex-col
-    <div className="min-h-screen bg-[#f2f5f7] flex flex-col font-sans text-[#1a3151]">
-      <Sidebar />
-      <div className="flex-1 p-8 overflow-y-auto">
+    <div className={`w-full min-h-screen ${THEME.colors.bgMain} font-sans p-8 pb-20`}>
+      <div className="max-w-[1400px] mx-auto space-y-8">
         
-        <h1 className="text-3xl font-black uppercase italic mb-8 flex items-center gap-3">
-          <Trophy className="text-[#e30613]" size={32} />
-          Управление сезонами
-        </h1>
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-6">
+            <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 shrink-0">
+              <Trophy size={28} />
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Админ панель</span>
+              <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tight leading-none mt-1">
+                Управление <span className={THEME.colors.primaryText}>Сезонами</span>
+              </h1>
+            </div>
+          </div>
+        </div>
 
         {/* 1. БЛОК АКТИВНОГО СЕЗОНА */}
-        <section className="mb-12">
+        <section>
           {!activeSeason ? (
-            <div className="bg-white p-10 rounded shadow text-center border-t-4 border-emerald-500">
-              <h2 className="text-2xl font-bold mb-2">Нет активного сезона</h2>
-              <p className="text-gray-500 mb-6">Создайте сезон, чтобы начать соревнования.</p>
+            <div className="bg-white p-12 rounded-[32px] shadow-sm border border-gray-100 text-center max-w-2xl mx-auto">
+              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">
+                <AlertTriangle size={32} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Нет активного сезона</h2>
+              <p className="text-sm text-gray-500 mb-8 max-w-sm mx-auto">
+                Сейчас в системе нет запущенных соревнований. Создайте новый сезон, чтобы начать генерацию матчей.
+              </p>
               <button 
                 onClick={handleStartSeason} 
                 disabled={loading}
-                className="bg-emerald-600 text-white px-8 py-4 rounded font-bold uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 mx-auto"
+                className="bg-emerald-600 text-white px-8 py-4 rounded-xl font-black uppercase text-[11px] tracking-[0.2em] hover:bg-emerald-700 transition-all flex items-center gap-3 mx-auto shadow-lg shadow-emerald-100"
               >
-                {loading ? <Loader2 className="animate-spin"/> : <Play size={20} fill="currentColor" />}
-                Начать сезон
+                {loading ? <Loader2 className="animate-spin" size={18}/> : <Play size={18} fill="currentColor" />}
+                Начать новый сезон
               </button>
             </div>
           ) : (
             <div className="space-y-6">
               {/* Карточка текущего сезона */}
-              <div className="bg-[#1a3151] text-white p-6 rounded shadow-lg relative overflow-hidden flex justify-between items-center">
-                <div className="relative z-10">
-                  <p className="text-xs font-black uppercase tracking-[0.3em] text-[#e30613] mb-1">Active Season</p>
-                  <h2 className="text-4xl font-black italic tracking-tighter">СЕЗОН {activeSeason.year}</h2>
+              <div className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl shadow-emerald-100 relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
+                <div className="relative z-10 text-center md:text-left">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 rounded-full backdrop-blur-sm mb-4">
+                    <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Active Season</span>
+                  </div>
+                  <h2 className="text-5xl font-black tracking-tight mb-2">СЕЗОН {activeSeason.year}</h2>
+                  <p className="text-emerald-100 text-sm font-medium">Управление текущим игровым циклом</p>
                 </div>
                 
                 <button 
                    onClick={() => handleDelete(activeSeason.id, activeSeason.year)}
-                   className="relative z-20 bg-red-600/20 hover:bg-red-600 text-white p-2 rounded transition-colors"
+                   className="relative z-20 bg-white/10 hover:bg-red-500 text-white p-3 rounded-xl transition-all backdrop-blur-md"
                    title="Удалить текущий сезон"
                 >
                   <Trash2 size={20} />
                 </button>
 
-                <div className="absolute right-0 bottom-0 text-[100px] font-black italic text-white/5 leading-none -mb-4 -mr-4">
+                <div className="absolute right-0 bottom-0 text-[180px] font-black text-black/5 leading-none -mb-8 -mr-8 select-none pointer-events-none">
                   {activeSeason.year}
                 </div>
               </div>
 
               {/* Панель действий */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Шаг 2 */}
-                <div className="bg-white p-5 border border-gray-200 rounded shadow-sm">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">ШАГ 2</span>
-                    <h3 className="font-bold">Состав Лиг</h3>
+                <div className="bg-white p-6 border border-gray-100 rounded-[24px] shadow-sm hover:shadow-md transition-all group">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="bg-gray-100 text-gray-600 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">Этап 1</span>
+                    <List size={20} className="text-gray-300 group-hover:text-emerald-500 transition-colors"/>
                   </div>
-                  <p className="text-xs text-gray-400 mb-4 h-10">
-                    Добавьте или уберите команды из лиг вручную перед стартом.
+                  <h3 className="font-bold text-gray-900 mb-2">Настройка Лиг</h3>
+                  <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+                    Добавьте команды в дивизионы или отредактируйте состав лиг вручную перед стартом.
                   </p>
                   <button 
                     onClick={() => router.push('/admin/countries/list')}
-                    className="w-full border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-bold hover:bg-gray-50 flex items-center justify-center gap-2"
+                    className="w-full border border-gray-200 text-gray-600 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 hover:text-emerald-600 transition-all"
                   >
-                    <List size={16}/> Редактировать лиги
+                    Редактировать
                   </button>
                 </div>
 
                 {/* Шаг 3 */}
-                <div className="bg-white p-5 border border-gray-200 rounded shadow-sm">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">ШАГ 3</span>
-                    <h3 className="font-bold">Календарь</h3>
+                <div className="bg-white p-6 border border-gray-100 rounded-[24px] shadow-sm hover:shadow-md transition-all group">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="bg-emerald-50 text-emerald-600 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">Этап 2</span>
+                    <Calendar size={20} className="text-gray-300 group-hover:text-emerald-500 transition-colors"/>
                   </div>
-                  <p className="text-xs text-gray-400 mb-4 h-10">
-                    Сгенерировать матчи для всех дивизионов.
+                  <h3 className="font-bold text-gray-900 mb-2">Календарь матчей</h3>
+                  <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+                    Сгенерировать расписание матчей для всех дивизионов по круговой системе.
                   </p>
                   <button 
                     onClick={handleGenerateCalendar}
                     disabled={loading}
-                    className="w-full bg-[#1a3151] text-white px-4 py-2 rounded text-sm font-bold hover:bg-[#233b5d] flex items-center justify-center gap-2"
+                    className="w-full bg-emerald-600 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all disabled:opacity-50"
                   >
-                    {loading ? <Loader2 className="animate-spin" size={16}/> : <Calendar size={16}/>}
-                    Генерация матчей
+                    {loading ? <Loader2 className="animate-spin inline mr-2" size={14}/> : "Сгенерировать"}
                   </button>
                 </div>
 
                 {/* Шаг 4 */}
-                <div className="bg-white p-5 border-l-4 border-[#e30613] rounded shadow-sm">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded">ФИНАЛ</span>
-                    <h3 className="font-bold text-[#e30613]">Завершение</h3>
+                <div className="bg-white p-6 border-l-4 border-red-500 rounded-[24px] rounded-l-none shadow-sm hover:shadow-md transition-all group">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="bg-red-50 text-red-600 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">Финал</span>
+                    <FastForward size={20} className="text-gray-300 group-hover:text-red-500 transition-colors"/>
                   </div>
-                  <p className="text-xs text-gray-400 mb-4 h-10">
-                    Закончить сезон, провести ротацию и начать новый год.
+                  <h3 className="font-bold text-gray-900 mb-2">Завершение сезона</h3>
+                  <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+                    Закончить текущий год, провести ротацию команд и начать новый сезон.
                   </p>
                   <button 
                     onClick={handleRotate}
                     disabled={loading}
-                    className="w-full bg-[#e30613] text-white px-4 py-2 rounded text-sm font-bold hover:bg-red-700 flex items-center justify-center gap-2"
+                    className="w-full bg-red-500 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-all disabled:opacity-50"
                   >
-                    {loading ? <Loader2 className="animate-spin" size={16}/> : <FastForward size={16}/>}
-                    Завершить сезон
+                    {loading ? <Loader2 className="animate-spin inline mr-2" size={14}/> : "Завершить сезон"}
                   </button>
                 </div>
               </div>
@@ -219,50 +248,52 @@ export default function SeasonsPage() {
 
         {/* 2. БЛОК АРХИВА / ИСТОРИИ */}
         <section>
-          <h2 className="text-xl font-bold flex items-center gap-2 mb-4 text-gray-400 uppercase tracking-wider">
-            <Archive size={20} />
-            Архив сезонов
-          </h2>
+          <div className="flex items-center gap-3 mb-6 px-2">
+            <Archive size={18} className="text-emerald-600" />
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-gray-400">
+              Архив истории
+            </h2>
+          </div>
 
-          <div className="bg-white rounded shadow overflow-hidden">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100 text-gray-500 uppercase font-bold text-xs">
-                <tr>
-                  <th className="px-6 py-4">Сезон</th>
+          <div className="bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden">
+            <table className="w-full text-left">
+              <thead className="bg-gray-50/50 border-b border-gray-100">
+                <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                  <th className="px-8 py-4">Сезон</th>
                   <th className="px-6 py-4">Статус</th>
-                  <th className="px-6 py-4">Дата создания</th>
-                  <th className="px-6 py-4 text-right">Действия</th>
+                  <th className="px-6 py-4">Создан</th>
+                  <th className="px-8 py-4 text-right">Действия</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-50">
                 {seasons.map((season) => (
-                  <tr key={season.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-lg">
+                  <tr key={season.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-8 py-4 font-black text-gray-900 text-lg">
                       {season.year}
                     </td>
                     <td className="px-6 py-4">
                       {season.status === 'ACTIVE' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse"></span>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                           Активен
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black bg-gray-100 text-gray-500 uppercase tracking-wider">
                           <CheckCircle size={10} />
                           Завершен
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-gray-500">
-                      {new Date(season.createdAt).toLocaleString('ru-RU')}
+                    <td className="px-6 py-4 text-xs font-bold text-gray-400">
+                      {new Date(season.createdAt).toLocaleDateString('ru-RU')}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-8 py-4 text-right">
                       <button
                         onClick={() => handleDelete(season.id, season.year)}
-                        className="text-gray-400 hover:text-red-600 transition-colors p-2 rounded hover:bg-red-50"
-                        title="Удалить сезон (Команды останутся)"
+                        className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                        title="Удалить сезон"
                       >
-                        <Trash2 size={18} />
+                        <Trash2 size={16} />
                       </button>
                     </td>
                   </tr>
@@ -270,8 +301,8 @@ export default function SeasonsPage() {
                 
                 {seasons.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-gray-400 italic">
-                      История пуста
+                    <td colSpan={4} className="px-8 py-12 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">
+                      История сезонов пуста
                     </td>
                   </tr>
                 )}

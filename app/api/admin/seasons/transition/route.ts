@@ -7,16 +7,40 @@ export async function POST(req: Request) {
   try {
     const { type, seasonId } = await req.json();
 
-    // 1. НАЧАЛО: Создание "пустого" сезона
+    // 1. НАЧАЛО: Создание нового сезона
     if (type === "CREATE_NEXT") {
       const lastSeason = await prisma.season.findFirst({ orderBy: { year: 'desc' } });
-      const nextYear = lastSeason ? lastSeason.year + 1 : 2025;
+      
+      // ЛОГИКА НУМЕРАЦИИ:
+      // Если сезонов нет -> 1
+      // Если последний сезон > 2000 (старый формат) -> сбрасываем на 1
+      // Иначе -> +1
+      let nextYear = 1;
+      if (lastSeason) {
+        if (lastSeason.year > 2000) {
+           nextYear = 1; // Сброс, если были "годы"
+        } else {
+           nextYear = lastSeason.year + 1;
+        }
+      }
+
+      // Проверка на дубликат (на случай, если сезон 1 уже есть, но не последний)
+      const existing = await prisma.season.findUnique({ where: { year: nextYear } });
+      if (existing) {
+         // Если 1 занят, ищем первый свободный слот
+         const allSeasons = await prisma.season.findMany({ select: { year: true } });
+         const years = allSeasons.map(s => s.year).sort((a,b) => a-b);
+         nextYear = (years[years.length - 1] || 0) + 1;
+         // Если вдруг опять попали в >2000, форсируем
+         if (nextYear > 2000) nextYear = 1; 
+         while (years.includes(nextYear)) nextYear++;
+      }
 
       const newSeason = await prisma.season.create({
         data: { year: nextYear, status: 'ACTIVE' }
       });
 
-      // Если был старый сезон, копируем структуру лиг (без команд)
+      // Копирование структуры лиг
       if (lastSeason) {
         const oldLeagues = await prisma.league.findMany({ 
           where: { seasonId: lastSeason.id } 
@@ -34,55 +58,85 @@ export async function POST(req: Request) {
           });
         }
       }
-      return NextResponse.json({ message: `Сезон ${nextYear} создан. Распределите команды.` });
+      return NextResponse.json({ message: `Сезон ${nextYear} создан.` });
     }
 
-    // 2. ЗАВЕРШЕНИЕ: Ротация команд (Промоушен/Релегация)
+    // 2. ЗАВЕРШЕНИЕ И РОТАЦИЯ
     if (type === "FINISH_AND_ROTATE") {
       const currentSeason = await prisma.season.findUnique({ where: { id: seasonId } });
       if (!currentSeason) throw new Error("Сезон не найден");
 
-      // Создаем следующий сезон
-      const nextYear = currentSeason.year + 1;
-      const nextSeason = await prisma.season.create({ 
-        data: { year: nextYear, status: 'ACTIVE' } 
-      });
+      // Определяем следующий год для ротации
+      let nextYear = currentSeason.year + 1;
+      // Если текущий был "годом" (2025), следующий станет 1
+      if (currentSeason.year > 2000) nextYear = 1;
 
-      // Получаем страны, участвовавшие в сезоне
+      // Проверка на существование (вдруг сезон 1 уже создан заранее)
+      let nextSeason = await prisma.season.findUnique({ where: { year: nextYear } });
+      
+      if (!nextSeason) {
+        nextSeason = await prisma.season.create({ 
+          data: { year: nextYear, status: 'ACTIVE' } 
+        });
+      } else {
+        // Если сезон уже есть, просто активируем его (если он не завершен)
+        if (nextSeason.status === 'FINISHED') {
+           // Если сезон 1 уже был и завершен, создаем сезон 2...
+           const last = await prisma.season.findFirst({ orderBy: { year: 'desc' } });
+           nextYear = (last?.year || 0) + 1;
+           if (nextYear > 2000) nextYear = 1; // Защита
+           // Ищем свободный
+           const all = await prisma.season.findMany({ select: { year: true } });
+           const years = all.map(s => s.year);
+           while (years.includes(nextYear)) nextYear++;
+           
+           nextSeason = await prisma.season.create({
+             data: { year: nextYear, status: 'ACTIVE' }
+           });
+        } else {
+           // Если сезон есть и он ACTIVE/PENDING, используем его
+           await prisma.season.update({ where: { id: nextSeason.id }, data: { status: 'ACTIVE' } });
+        }
+      }
+
+      // ... (Остальная логика ротации без изменений) ...
       const activeCountries = await prisma.country.findMany({
         where: { leagues: { some: { seasonId: seasonId } } },
         include: {
           leagues: {
             where: { seasonId: seasonId },
-            orderBy: { level: 'asc' }, // D1, D2, D3...
-            include: { teams: true }   // Команды с текущей статистикой
+            orderBy: { level: 'asc' },
+            include: { teams: true }
           }
         }
       });
 
-      // Логика ротации
       for (const country of activeCountries) {
-        // Создаем карту новых лиг для следующего сезона
-        const nextLeaguesMap = new Map<number, string>(); // Level -> LeagueID
+        const nextLeaguesMap = new Map<number, string>();
 
         for (const oldLeague of country.leagues) {
-          const newLeague = await prisma.league.create({
-            data: {
-              name: oldLeague.name,
-              level: oldLeague.level,
-              teamsCount: oldLeague.teamsCount,
-              countryId: country.id,
-              seasonId: nextSeason.id
-            }
+          // Проверяем, есть ли уже такая лига в новом сезоне
+          let newLeague = await prisma.league.findFirst({
+            where: { seasonId: nextSeason.id, countryId: country.id, level: oldLeague.level }
           });
+
+          if (!newLeague) {
+            newLeague = await prisma.league.create({
+              data: {
+                name: oldLeague.name,
+                level: oldLeague.level,
+                teamsCount: oldLeague.teamsCount,
+                countryId: country.id,
+                seasonId: nextSeason.id
+              }
+            });
+          }
           nextLeaguesMap.set(newLeague.level, newLeague.id);
         }
 
         const maxLevel = country.leagues.length;
 
-        // Переносим команды
         for (const oldLeague of country.leagues) {
-          // Сортируем таблицу (Очки -> Разница мячей)
           const sortedTeams = [...oldLeague.teams].sort((a, b) => {
             if (b.points !== a.points) return b.points - a.points;
             return b.goalsDiff - a.goalsDiff;
@@ -92,11 +146,9 @@ export async function POST(req: Request) {
             const team = sortedTeams[i];
             let targetLevel = oldLeague.level;
 
-            // Зона повышения (Топ-2), если есть куда расти
             if (i < 2 && oldLeague.level > 1) {
               targetLevel = oldLeague.level - 1;
             }
-            // Зона вылета (Последние 2), если есть куда падать
             else if (i >= sortedTeams.length - 2 && oldLeague.level < maxLevel) {
               targetLevel = oldLeague.level + 1;
             }
@@ -104,12 +156,10 @@ export async function POST(req: Request) {
             const targetLeagueId = nextLeaguesMap.get(targetLevel);
 
             if (targetLeagueId) {
-              // Сбрасываем статистику и назначаем новую лигу
               await prisma.team.update({
                 where: { id: team.id },
                 data: {
                   leagueId: targetLeagueId,
-                  // Обнуление таблицы
                   points: 0, played: 0, wins: 0, draws: 0, losses: 0,
                   goalsScored: 0, goalsConceded: 0, goalsDiff: 0
                 }
@@ -119,13 +169,12 @@ export async function POST(req: Request) {
         }
       }
 
-      // Помечаем старый сезон как завершенный
       await prisma.season.update({
         where: { id: seasonId },
         data: { status: 'FINISHED' }
       });
 
-      return NextResponse.json({ message: `Сезон ${currentSeason.year} закрыт. Ротация выполнена.` });
+      return NextResponse.json({ message: `Сезон ${currentSeason.year} закрыт. Переход к сезону ${nextYear}.` });
     }
 
     return NextResponse.json({ error: "Неверный тип действия" }, { status: 400 });
